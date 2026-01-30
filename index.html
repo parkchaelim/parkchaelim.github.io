@@ -11,7 +11,7 @@
         <!-- Header -->
         <header class="header">
             <div class="header-left">
-                <h1 class="header-title" id="headerTitle">채림's 옷장 - 검색</h1>
+                <h1 class="header-title" id="headerTitle">검색</h1>
             </div>
             <div class="header-right">
                 <button class="btn-select-mode" id="selectModeBtn" style="display: none;">
@@ -23,6 +23,12 @@
                     <button class="btn-header-sm" id="deselectAllBtn">해제</button>
                     <button class="btn-header-done" id="selectDoneBtn">완료</button>
                 </div>
+                <button class="btn-edit-mode" id="editModeBtn" style="display: none;">
+                    편집
+                </button>
+                <button class="btn-edit-done" id="editDoneBtn" style="display: none;">
+                    완료
+                </button>
             </div>
         </header>
 
@@ -101,13 +107,29 @@
 
             <!-- Tags Tab -->
             <div class="tab-content" id="tagsTab">
-                <div class="tags-header">
+                <div class="tags-search-wrapper">
+                    <input 
+                        type="text" 
+                        id="tagsSearchInput" 
+                        class="tags-search-bar"
+                        placeholder="태그 검색"
+                        autocomplete="off"
+                    >
+                    <button class="tags-search-clear" id="tagsSearchClear" style="display: none;">✕</button>
+                </div>
+
+                <div class="tags-sort-control">
                     <select id="tagsSortBy">
-                        <option value="frequency">빈도순</option>
-                        <option value="alphabetic">가나다순</option>
+                        <option value="frequency">자주 사용</option>
+                        <option value="alphabetic">가나다</option>
                     </select>
                 </div>
+
                 <div class="tags-list" id="tagsList"></div>
+                
+                <div class="empty-state" id="tagsEmptyState" style="display: none;">
+                    <p>태그가 없어요</p>
+                </div>
             </div>
 
             <!-- Settings Tab -->
@@ -270,12 +292,28 @@
         </div>
     </div>
 
+    <!-- Rename Tag Modal -->
+    <div class="modal" id="renameTagModal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-body">
+                <h3 id="renameTagTitle">태그 이름 변경</h3>
+                <input type="text" id="renameTagInput" class="form-input" placeholder="새 태그명">
+                <div class="confirm-actions">
+                    <button class="btn-secondary" id="renameTagCancelBtn">취소</button>
+                    <button class="btn-primary" id="renameTagOkBtn">저장</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Confirm Modal -->
     <div class="modal" id="confirmModal">
         <div class="modal-overlay"></div>
         <div class="modal-content modal-sm">
             <div class="modal-body">
                 <p id="confirmText"></p>
+                <div id="confirmExtra" class="confirm-extra"></div>
                 <div class="confirm-actions">
                     <button class="btn-secondary" id="confirmCancelBtn">취소</button>
                     <button class="btn-danger" id="confirmOkBtn">삭제</button>
