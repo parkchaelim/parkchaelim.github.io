@@ -1,242 +1,155 @@
 <!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/html">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>박채림_커스텀멜로우_포트폴리오</title>
-    <link rel="stylesheet" href="css/plugin/reset.css">
-    <link rel="stylesheet" href="css/plugin/common.css">
-    <link rel="stylesheet" href="css/plugin/slick.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="shortcut icon" href="../favicon.jpg">
-
-    <script src="js/plugin/jquery-1.8.1.min.js"></script>
-    <script src="js/plugin/easing.js"></script>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outfit Archive</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>Outfit Archive</h1>
+            <div class="header-actions">
+                <button id="exportBtn" class="btn btn-secondary" aria-label="데이터 내보내기">내보내기</button>
+                <button id="importBtn" class="btn btn-secondary" aria-label="데이터 가져오기">가져오기</button>
+                <input type="file" id="importFile" accept=".json" style="display: none;">
+            </div>
+        </header>
 
-<section id="container">
+        <!-- Search & Filter Section -->
+        <section class="search-section">
+            <div class="search-box">
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    placeholder="태그/키워드 입력 (공백 또는 쉼표로 구분)" 
+                    class="search-input"
+                    aria-label="검색"
+                >
+                <button id="clearSearchBtn" class="btn-clear" aria-label="검색 초기화">✕</button>
+            </div>
+            
+            <div class="filter-controls">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="filterMode" aria-label="OR 필터 모드">
+                    <span>OR 필터 (기본: AND)</span>
+                </label>
+                <select id="sortBy" class="select-sort" aria-label="정렬">
+                    <option value="newest">최신순</option>
+                    <option value="oldest">오래된순</option>
+                </select>
+            </div>
 
-    <section id="section01">
-        <div class="trigger-this-01">
-            <div class="fix-this-01"> 
-             <div class="s1_title"><img src="image/section01/s1_title.png" alt="제목"/></div>
-            <div class="main"><img src="image/section01/main.png" alt="메인사진"/></div>
-            <div class="info"><img src="image/section01/info.png" alt="정보"/></div>
-            <div class="sub_1"><img src="image/section01/sub_1.png" alt="꾸밈"/></div>
-            <div class="s2"><img src="image/section01/s2.png" alt="동그라미배경"/></div>
-            <div class="s2_title1"><img src="image/section01/s2_title1.png" alt="overview"/></div>
-            <div class="main_black"><img src="image/section01/main_black.png" alt="메인흑백"/></div>
-            <div class="sub_2"><img src="image/section01/sub_2.png" alt="꾸밈2"/></div>
-            <div class="s2_title2"><img src="image/section01/s2_title2.png" alt="본문1"/></div>
-            <div class="s2_title3"><img src="image/section01/s2_title3.png" alt="본문2"/></div>
-        </div>
-        </div>
+            <!-- Tag Quick Filter -->
+            <div id="tagQuickFilter" class="tag-quick-filter"></div>
+        </section>
 
+        <!-- Image Upload Section -->
+        <section class="upload-section">
+            <div id="uploadArea" class="upload-area" aria-label="이미지 드래그 영역">
+                <p>이미지 파일을 드래그하거나 클릭하여 추가</p>
+                <p class="small">또는 Ctrl/⌘+V로 캡처 이미지 붙여넣기</p>
+            </div>
+            <input type="file" id="fileInput" accept="image/*" multiple style="display: none;">
+        </section>
 
+        <!-- Gallery Grid -->
+        <section class="gallery-section">
+            <div id="galleryGrid" class="gallery-grid"></div>
+            <div id="emptyState" class="empty-state">
+                <p>아직 저장된 이미지가 없습니다.</p>
+            </div>
+        </section>
+    </div>
 
-    </section>
+    <!-- Image Edit Modal -->
+    <div id="editModal" class="modal" style="display: none;">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>이미지 편집</h2>
+                <button class="modal-close" aria-label="닫기">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="edit-layout">
+                    <div class="edit-image-section">
+                        <img id="editImage" src="" alt="편집 이미지">
+                        <p id="editDate" class="edit-date"></p>
+                    </div>
+                    <div class="edit-form-section">
+                        <div class="form-group">
+                            <label>태그</label>
+                            <div class="tag-input-wrapper">
+                                <input 
+                                    type="text" 
+                                    id="editTagInput" 
+                                    placeholder="태그 입력 (Enter로 추가)"
+                                    class="tag-input"
+                                    aria-label="태그 입력"
+                                    autocomplete="off"
+                                >
+                                <div id="editTagSuggestions" class="tag-suggestions"></div>
+                            </div>
+                            <div id="editTagList" class="tag-list"></div>
+                        </div>
 
-    <section id="section02">
+                        <div class="form-group">
+                            <label>메모</label>
+                            <textarea 
+                                id="editMemo" 
+                                placeholder="이미지에 대한 메모 작성"
+                                class="textarea"
+                                aria-label="메모"
+                            ></textarea>
+                        </div>
 
-        <div class="trigger-this-02">
-            <div class="fix-this-02">
-                <div class="s2_title"><img src="image/section02/s2_title.png" alt="글씨"/></div>
-                <div class="inner">
-                    <div class="contents"><img src="image/section02/s2_bg.png" alt="가로스크롤"/></div>
-
-        
-                    <div class="b_img1"><img src="image/section02/b_img1.png" alt="브랜드이미지1"/></div>
-                    <div class="b_img2"><img src="image/section02/b_img2.png" alt="브랜드이미지2"/></div>
-                    <div class="b_img3"><img src="image/section02/b_img3.png" alt="브랜드이미지3"/></div>
-                    <div class="b_img4"><img src="image/section02/b_img4.png" alt="브랜드이미지4"/></div>
-                    <div class="b_img5"><img src="image/section02/b_img5.png" alt="브랜드이미지5"/></div>
-                   
-
+                        <div class="form-actions">
+                            <button id="editSaveBtn" class="btn btn-primary">저장</button>
+                            <button id="editDeleteBtn" class="btn btn-danger">삭제</button>
+                            <button id="editCancelBtn" class="btn btn-secondary">취소</button>
+                        </div>
+                    </div>
                 </div>
-                
             </div>
         </div>
+    </div>
 
+    <!-- Tag Edit Modal (for new uploads) -->
+    <div id="tagModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>이미지 태그 추가</h2>
+                <button class="modal-close" aria-label="닫기">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>태그 입력</label>
+                    <div class="tag-input-wrapper">
+                        <input 
+                            type="text" 
+                            id="tagModalInput" 
+                            placeholder="태그 입력 (Enter로 추가)"
+                            class="tag-input"
+                            aria-label="태그 입력"
+                            autocomplete="off"
+                        >
+                        <div id="tagModalSuggestions" class="tag-suggestions"></div>
+                    </div>
+                    <div id="tagModalList" class="tag-list"></div>
+                </div>
 
-    </section>
-
-    <section id="section03">
-        <div class="trigger-this-03">
-            <div class="fix-this-03"> 
-             <div class="s3_title"><img src="image/section03/s3_title.png" alt="제목"/></div>
-             <div class="s3_sub"><img src="image/section03/s3_sub.png" alt="왼쪽꾸밈"/></div>
-
-             <div class="circle1"><img src="image/section03/circle1.png" alt="원1"/></div>
-             <div class="circle2"><img src="image/section03/circle2.png" alt="원2"/></div>
-             <div class="circle3"><img src="image/section03/circle3.png" alt="원3"/></div>
-             <div class="as_is"><img src="image/section03/AS IS.png" alt="as_is"/></div>
-
-
-             <div class="circle4"><img src="image/section03/s3_circle4.png" alt="원4"/></div>
-             <div class="to_be"><img src="image/section03/TO BE.png" alt="to_be"/></div>
-             <div class="line"><img src="image/section03/line.png" alt="선"/></div>
-            
+                <div class="form-actions">
+                    <button id="tagModalSaveBtn" class="btn btn-primary">저장</button>
+                    <button id="tagModalSkipBtn" class="btn btn-secondary">건너뛰기</button>
+                </div>
+            </div>
         </div>
-        </div>
-      
-    </section>
+    </div>
 
-    <section id="section04">
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
 
-        <div class="trigger-this-04">
-            <div class="fix-this-04">
-                <div class="s4_img"><img src="image/section04/s4_img.png" alt="메인이미지"/></div>
-                <div class="cus"><img src="image/section04/cus.png" alt="cus"/></div>
-                <div class="tom"><img src="image/section04/tom.png" alt="tom"/></div>
-                <div class="mellow"><img src="image/section04/mellow.png" alt="mellow"/></div>
-                <div class="mellow1"><img src="image/section04/mellow1.png" alt="mellow"/></div>
-
-
-                <div class="s4_title"><img src="image/section04/s4_title.png" alt="메인타이틀"/></div>
-                <div class="s4_title2"><img src="image/section04/s4_title2.png" alt="시각화"/></div>
-                <div class="s4_title3"><img src="image/section04/s4_title3.png" alt="타이포그래피"/></div>
-                <div class="s4_title4"><img src="image/section04/s4_title4.png" alt="컬러"/></div>
-                <div class="typo"><img src="image/section04/typo.png" alt="폰트설명"/></div>
-                <div class="color_1"><img src="image/section04/circle_1.png" alt="컬러1"/></div>
-                <div class="color_2"><img src="image/section04/circle_2.png" alt="컬러2"/></div>
-                <div class="color_3"><img src="image/section04/circle_3.png" alt="컬러3"/></div>
-               
-
-        </div>
-
-
-    </section>
-
-    <section id="section05">
-
-
-        <div class="s5_title"><img src="image/section05/s5_title.png" alt="제목"/></div>
-        <div class="s5_title2"><img src="image/section05/s5_title2.png" alt="본문"/></div>
-        <div class="s5_main"><img src="image/section05/main.png" alt="창"/></div>
-        <div class="s5_home"><img src="image/section05/home.png" alt="뒤에 홈페이지"/></div>
-        
-        <div class="txt_1"><img src="image/section05/txt_1.png" alt="글씨1"/></div>
-        <div class="txt_2"><img src="image/section05/txt_2.png" alt="글씨2"/></div>
-        <div class="txt_3"><img src="image/section05/txt_3.png" alt="글씨3"/></div>
-        <div class="txt_4"><img src="image/section05/txt_4.png" alt="글씨4"/></div>
-
-
-        <div class="window"><img src="image/section05/window.png" alt="창 배경"/></div>
-        <div class="gif"><img src="image/section05/window.gif" alt="gif"/></div>
-
-
-        </div>
-    </section>
-
-    <section id="section06">
-
-        <div class="trigger-this-06">
-            <div class="fix-this-06">
-                <div class="txt_5"><img src="image/section06/txt_5.png" alt="본문5"/></div>
-                <div class="arrow"><img src="image/section06/arrow.png" alt="화살표"/></div>
-                <div class="txt_6"><img src="image/section06/txt_6.png" alt="본문6"/></div>
-                <div class="img"><img src="image/section06/img.png" alt="버튼"/></div>
-                <div class="txt_7"><img src="image/section06/txt_7.png" alt="본문7"/></div>
-                <div class="txt_ro"><img src="image/section06/txt_ro.png" alt="도는글씨"/></div>
-                <div class="b_arrow"><img src="image/section06/b_arrow.png" alt="버튼화살표"/></div>
-                <div class="txt_ro2"><img src="image/section06/txt_ro.png" alt="도는글씨"/></div>
-                <div class=eclipse></div>
-                <div class="sub_title"><img src="image/section06/s6_sub.png" alt="꾸밈글씨"/></div>
-                <div class="sub_img1"><img src="image/section06/img_1.png" alt="서브이미지1"/></div>
-                <div class="sub_img2"><img src="image/section06/img_2.png" alt="서브이미지2"/></div>
-                   
-
-
-
-
-             </div>
-
-               
-
-        </div>
-
-
-    </section>
-
-
-
-    <section id="section11">
-
-        <div class="sub_window"><img src="image/section11/sub_window.png" alt="프린츠화면"/></div>
-        <div class="line"><img src="image/section11/line.png" alt="꾸밈선"/></div>
-        <div class="txt_window"><img src="image/section11/txt_window.png" alt="창 글씨"/></div>
-        <div class="txt_menu"><img src="image/section11/txt_menu.png" alt="메뉴 글씨"/></div>
-        <div class="menu"><img src="image/section11/menu.png" alt="메뉴"/></div>
-
-
-
-
-    </section>
-
-    <section id="section12">
-
-
-        <div class="bg_txt"><img src="image/section12/bg_txt.png" alt="꾸밈글씨"/></div>
-      
-        <div class="title"><img src="image/section12/s12_title.png" alt="타이틀"/></div>
-        <div class="page2_txt"><img src="image/section12/page2_txt.png" alt="페이지2 글씨"/></div>
-        <div class="page2"><img src="image/section12/s12_page2.png" alt="페이지2"/></div>
-        <div class="mockup"><img src="image/section12/mockup.png" alt="목업"/></div>
-        <div class="page3"><img src="image/section12/s12_page3.png" alt="페이지3"/></div>
-        <div class="page3_txt1"><img src="image/section12/p3_txt1.png" alt="페이지3"/></div>
-        <div class="page3_txt2"><img src="image/section12/page3_txt2.png" alt="페이지3"/></div>
-        <div class="page3_txt3"><img src="image/section12/page3_txt3.png" alt="페이지3"/></div>
-        <div class="float"><img src="image/section12/float.png" alt="페이지3"/></div>
-
-        
-
-    </section>
-
-    <section id="section13">
-      
-        <div class="bg_txt"><img src="image/section13/bg_txt.png"></div>
-        <div class="bg_img"><img src="image/section13/bg_img.png"></div>
-        <div class="s13_window"><img src="image/section13/s13_window.png"></div>
-
-        <div class="s13_txt"><img src="image/section13/s13_txt.png"></div>
-        <div class="s13_mockup"><img src="image/section13/s13_mockup.png"></div>
-
-    </section>
-
-    <section id="section14">
-        <div class="page5"><img src="image/section14/page5.png"></div>
-        <div class="page6"><img src="image/section14/page6.png"></div>
-        <div class="img"><img src="image/section14/img.png"></div>
-        <div class="txt_2"><img src="image/section14/txt2.png"></div>
-        <div class="txt_1"><img src="image/section14/txt_1.png"></div>
-
-        <div class="end"><img src="image/section14/end.png"></div>
-        <div class="end_txt"><img src="image/section14/end_txt.png"></div>
-
-
-
-
-
-    </section>
-
-
-
-
-</section>
-
-
-
-
-<script src="js/plugin/gsap.js"></script>
-<script src="js/plugin/scrollTrigger.js"></script>
-<script src="js/plugin/jquery.nicescroll.min.js"></script>
-<script src="js/plugin/slick.min.js"></script>
-<script src="js/scrollbar.js"></script>
-<script src="js/setting.js"></script>
-<script src="js/main.js"></script>
-
-
+    <script src="app.js"></script>
 </body>
 </html>
