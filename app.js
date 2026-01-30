@@ -4,6 +4,7 @@ const appState = {
     allImages: [],
     filteredImages: [],
     allTags: [],
+    tagMetadata: {}, // { tagName: { createdAt, usageCount, type } }
     recentTags: [],
     tagFrequency: {},
     selectedImageIds: new Set(),
@@ -12,6 +13,7 @@ const appState = {
     sortBy: 'newest',
     currentImageIndex: 0,
     isSelectMode: false,
+    isTagEditMode: false,
     currentEditImageId: null,
     currentTagPickerTarget: null,
     useLocalStorage: false,
@@ -66,6 +68,9 @@ async function initDB() {
             if (!db.objectStoreNames.contains('tags')) {
                 db.createObjectStore('tags', { keyPath: 'name' });
             }
+            if (!db.objectStoreNames.contains('tagMetadata')) {
+                db.createObjectStore('tagMetadata', { keyPath: 'name' });
+            }
         };
     });
 }
@@ -73,6 +78,7 @@ async function initDB() {
 async function loadAllData() {
     appState.allImages = await dbGetAllImages();
     appState.allTags = await dbGetTags();
+    appState.tagMetadata = await dbGetTagMetadata();
 
     if (appState.allTags.length === 0) {
         appState.allTags = [
@@ -81,17 +87,34 @@ async function loadAllData() {
             '흰색', '검정', '회색', '베이지', '브라운', '네이비', '블루', '그린', '올리브', '카키', '레드', '핑크'
         ];
         await dbSaveTags(appState.allTags);
+        initializeTagMetadata();
     }
 
     appState.tagFrequency = {};
     appState.allImages.forEach(img => {
         img.tags.forEach(tag => {
             appState.tagFrequency[tag] = (appState.tagFrequency[tag] || 0) + 1;
+            if (appState.tagMetadata[tag]) {
+                appState.tagMetadata[tag].usageCount = appState.tagFrequency[tag];
+            }
         });
     });
 
     appState.recentTags = JSON.parse(localStorage.getItem('recentTags') || '[]');
     updateInfoDisplay();
+}
+
+function initializeTagMetadata() {
+    appState.allTags.forEach(tag => {
+        if (!appState.tagMetadata[tag]) {
+            appState.tagMetadata[tag] = {
+                createdAt: new Date().toISOString(),
+                usageCount: appState.tagFrequency[tag] || 0,
+                type: 'custom'
+            };
+        }
+    });
+    dbSaveTagMetadata(appState.tagMetadata);
 }
 
 function saveRecentTags() {
@@ -213,15 +236,52 @@ function dbSaveTags(tags) {
     });
 }
 
+function dbGetTagMetadata() {
+    if (appState.useLocalStorage) {
+        return Promise.resolve(JSON.parse(localStorage.getItem('tagMetadata') || '{}'));
+    }
+    return new Promise((resolve, reject) => {
+        const transaction = appState.db.transaction(['tagMetadata'], 'readonly');
+        const store = transaction.objectStore('tagMetadata');
+        const request = store.getAll();
+        request.onsuccess = () => {
+            const metadata = {};
+            request.result.forEach(item => {
+                metadata[item.name] = item;
+            });
+            resolve(metadata);
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
+function dbSaveTagMetadata(metadata) {
+    if (appState.useLocalStorage) {
+        localStorage.setItem('tagMetadata', JSON.stringify(metadata));
+        return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+        const transaction = appState.db.transaction(['tagMetadata'], 'readwrite');
+        const store = transaction.objectStore('tagMetadata');
+        store.clear();
+        Object.entries(metadata).forEach(([name, data]) => {
+            store.add({ name, ...data });
+        });
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+    });
+}
+
 function dbClearAll() {
     if (appState.useLocalStorage) {
         localStorage.clear();
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
-        const transaction = appState.db.transaction(['images', 'tags'], 'readwrite');
+        const transaction = appState.db.transaction(['images', 'tags', 'tagMetadata'], 'readwrite');
         transaction.objectStore('images').clear();
         transaction.objectStore('tags').clear();
+        transaction.objectStore('tagMetadata').clear();
         transaction.oncomplete = () => resolve();
         transaction.onerror = () => reject(transaction.error);
     });
@@ -399,7 +459,33 @@ function setupEventListeners() {
         }
     });
 
-    // Tags
+    // Tags Tab
+    document.getElementById('editModeBtn').addEventListener('click', () => {
+        appState.isTagEditMode = true;
+        updateTagEditMode();
+        renderTagsList(document.getElementById('tagsSortBy').value);
+    });
+
+    document.getElementById('editDoneBtn').addEventListener('click', () => {
+        appState.isTagEditMode = false;
+        updateTagEditMode();
+        renderTagsList(document.getElementById('tagsSortBy').value);
+    });
+
+    const tagsSearchInput = document.getElementById('tagsSearchInput');
+    const tagsSearchClear = document.getElementById('tagsSearchClear');
+
+    tagsSearchInput.addEventListener('input', () => {
+        tagsSearchClear.style.display = tagsSearchInput.value ? 'flex' : 'none';
+        renderTagsList(document.getElementById('tagsSortBy').value);
+    });
+
+    tagsSearchClear.addEventListener('click', () => {
+        tagsSearchInput.value = '';
+        tagsSearchClear.style.display = 'none';
+        renderTagsList(document.getElementById('tagsSortBy').value);
+    });
+
     document.getElementById('tagsSortBy').addEventListener('change', (e) => {
         renderTagsList(e.target.value);
     });
@@ -446,6 +532,18 @@ function setupEventListeners() {
     // Confirm Modal
     document.getElementById('confirmCancelBtn').addEventListener('click', () => {
         closeModal('confirmModal');
+    });
+
+    // Rename Tag Modal
+    document.getElementById('renameTagCancelBtn').addEventListener('click', () => {
+        closeModal('renameTagModal');
+    });
+
+    document.getElementById('renameTagOkBtn').addEventListener('click', () => {
+        const newName = document.getElementById('renameTagInput').value.trim();
+        if (newName && appState.currentTagToRename) {
+            renameTag(appState.currentTagToRename, newName);
+        }
     });
 
     // Image Viewer
@@ -519,6 +617,7 @@ function switchTab(tabName) {
         updateSelectModeBar();
         renderArchiveGrid();
     } else if (tabName === 'tags') {
+        updateTagEditMode();
         renderTagsList('frequency');
     }
 }
@@ -528,7 +627,6 @@ function updateSelectionUI() {
     const count = appState.selectedImageIds.size;
     document.getElementById('selectionCount').textContent = `${count}개 선택`;
 
-    // Update delete button disabled state
     const deleteBtn = document.getElementById('deleteSelectedBtn');
     deleteBtn.disabled = count === 0;
 }
@@ -537,7 +635,6 @@ function updateSelectModeBar() {
     const selectModeBtn = document.getElementById('selectModeBtn');
     const selectModeBar = document.getElementById('selectModeBar');
     const multiActionBar = document.getElementById('multiActionBar');
-    const mainContent = document.querySelector('.main-content');
 
     if (appState.isSelectMode && document.getElementById('archiveTab').classList.contains('active')) {
         selectModeBtn.style.display = 'none';
@@ -552,6 +649,20 @@ function updateSelectModeBar() {
     }
 
     updateSelectionUI();
+}
+
+// ====== Tag Edit Mode ======
+function updateTagEditMode() {
+    const editModeBtn = document.getElementById('editModeBtn');
+    const editDoneBtn = document.getElementById('editDoneBtn');
+
+    if (appState.isTagEditMode && document.getElementById('tagsTab').classList.contains('active')) {
+        editModeBtn.style.display = 'none';
+        editDoneBtn.style.display = 'block';
+    } else {
+        editModeBtn.style.display = document.getElementById('tagsTab').classList.contains('active') ? 'block' : 'none';
+        editDoneBtn.style.display = 'none';
+    }
 }
 
 // ====== Search Tab ======
@@ -658,7 +769,14 @@ function renderArchiveGrid() {
 // ====== Tags Tab ======
 function renderTagsList(sortBy) {
     const list = document.getElementById('tagsList');
+    const empty = document.getElementById('tagsEmptyState');
+    const searchQuery = document.getElementById('tagsSearchInput').value.toLowerCase();
+
     let tags = [...appState.allTags];
+
+    if (searchQuery) {
+        tags = tags.filter(tag => tag.toLowerCase().includes(searchQuery));
+    }
 
     if (sortBy === 'frequency') {
         tags.sort((a, b) => (appState.tagFrequency[b] || 0) - (appState.tagFrequency[a] || 0));
@@ -666,8 +784,27 @@ function renderTagsList(sortBy) {
         tags.sort();
     }
 
+    if (tags.length === 0) {
+        list.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+
+    empty.style.display = 'none';
+
     list.innerHTML = tags.map(tag => `
-        <button class="tag-item" onclick="addTagToSearch('${tag}')">${tag}</button>
+        <div class="tag-list-item" ${!appState.isTagEditMode ? `onclick="addTagToSearch('${tag}')"` : ''}>
+            <div class="tag-list-item-left">
+                ${appState.isTagEditMode ? `<div style="width: 6px; height: 6px; background: #ccc; border-radius: 50%;"></div>` : ''}
+                <span class="tag-list-item-name">${tag}</span>
+            </div>
+            <div class="tag-list-item-right">
+                <span class="tag-count-badge">${appState.tagFrequency[tag] || 0}</span>
+                ${appState.isTagEditMode ? `
+                    <button class="tag-delete-btn" onclick="openDeleteTagModal('${tag}')" style="margin: 0;">−</button>
+                ` : ''}
+            </div>
+        </div>
     `).join('');
 }
 
@@ -679,6 +816,124 @@ function addTagToSearch(tag) {
     }
     switchTab('search');
     applyFilters();
+}
+
+// ====== Tag Management ======
+async function openDeleteTagModal(tag) {
+    const usageCount = appState.tagFrequency[tag] || 0;
+    const text = `태그 '${tag}'를 삭제할까요?\n이 태그가 ${usageCount}개의 코디에 적용되어 있습니다.`;
+    
+    appState.currentTagToDelete = tag;
+    showConfirm(text, deleteTag, true);
+}
+
+async function deleteTag() {
+    const tag = appState.currentTagToDelete;
+    if (!tag) return;
+
+    // 모든 이미지에서 해당 태그 제거
+    appState.allImages.forEach(img => {
+        img.tags = img.tags.filter(t => t !== tag);
+    });
+
+    // 각 이미지 업데이트
+    for (const img of appState.allImages) {
+        await dbUpdateImage(img);
+    }
+
+    // 태그 목록에서 제거
+    appState.allTags = appState.allTags.filter(t => t !== tag);
+    await dbSaveTags(appState.allTags);
+
+    // 메타데이터 제거
+    delete appState.tagMetadata[tag];
+    delete appState.tagFrequency[tag];
+    await dbSaveTagMetadata(appState.tagMetadata);
+
+    // UI 업데이트
+    renderTagsList(document.getElementById('tagsSortBy').value);
+    applyFilters();
+    renderSearchGrid();
+    showToast('태그 삭제됨');
+    appState.currentTagToDelete = null;
+}
+
+async function renameTag(oldTag, newTag) {
+    if (!newTag || newTag === oldTag) {
+        closeModal('renameTagModal');
+        return;
+    }
+
+    newTag = newTag.trim().replace(/\s+/g, ' ');
+    if (!newTag) {
+        showToast('태그명을 입력해주세요');
+        return;
+    }
+
+    // 새 태그가 이미 존재하면 병합 처리
+    const isExisting = appState.allTags.includes(newTag);
+
+    // 모든 이미지의 태그 업데이트
+    appState.allImages.forEach(img => {
+        img.tags = img.tags.map(tag => tag === oldTag ? newTag : tag);
+        // 중복 제거
+        img.tags = [...new Set(img.tags)];
+    });
+
+    // 각 이미지 업데이트
+    for (const img of appState.allImages) {
+        await dbUpdateImage(img);
+    }
+
+    // 태그 목록 업데이트
+    if (!isExisting) {
+        // 기존 태그 제거, 새 태그 추가
+        appState.allTags = appState.allTags.filter(t => t !== oldTag);
+        appState.allTags.push(newTag);
+        appState.allTags.sort();
+        await dbSaveTags(appState.allTags);
+    } else {
+        // 기존 태그만 제거
+        appState.allTags = appState.allTags.filter(t => t !== oldTag);
+        await dbSaveTags(appState.allTags);
+    }
+
+    // 메타데이터 업데이트
+    if (appState.tagMetadata[oldTag]) {
+        appState.tagMetadata[newTag] = appState.tagMetadata[oldTag];
+        delete appState.tagMetadata[oldTag];
+    }
+    await dbSaveTagMetadata(appState.tagMetadata);
+
+    // 빈도 업데이트
+    if (appState.tagFrequency[oldTag]) {
+        appState.tagFrequency[newTag] = appState.tagFrequency[oldTag];
+        delete appState.tagFrequency[oldTag];
+    }
+
+    // 최근 태그 업데이트
+    appState.recentTags = appState.recentTags.map(t => t === oldTag ? newTag : t);
+    saveRecentTags();
+
+    // UI 업데이트
+    closeModal('renameTagModal');
+    renderTagsList(document.getElementById('tagsSortBy').value);
+    applyFilters();
+    renderSearchGrid();
+    renderTagPicker(document.getElementById('tagPickerSearch').value.toLowerCase());
+    showToast('태그명 변경됨');
+}
+
+// 태그 행 클릭 시 이름 변경 모달 열기 (편집모드일 때)
+function openRenameTagModal(tag) {
+    appState.currentTagToRename = tag;
+    document.getElementById('renameTagTitle').textContent = `태그 이름 변경`;
+    document.getElementById('renameTagInput').value = tag;
+    openModal('renameTagModal');
+    setTimeout(() => {
+        document.getElementById('renameTagInput').focus();
+        document.getElementById('renameTagInput').select();
+    }, 300);
 }
 
 // ====== Image Upload ======
@@ -1007,7 +1262,16 @@ async function createNewTag(tag) {
     const trimmed = tag.trim();
     if (!appState.allTags.includes(trimmed)) {
         appState.allTags.push(trimmed);
+        appState.allTags.sort();
         await dbSaveTags(appState.allTags);
+        
+        // 메타데이터 추가
+        appState.tagMetadata[trimmed] = {
+            createdAt: new Date().toISOString(),
+            usageCount: 0,
+            type: 'custom'
+        };
+        await dbSaveTagMetadata(appState.tagMetadata);
     }
     selectTag(trimmed);
 }
@@ -1033,7 +1297,8 @@ function exportData() {
         version: 1,
         exportDate: new Date().toISOString(),
         images: appState.allImages,
-        tags: appState.allTags
+        tags: appState.allTags,
+        tagMetadata: appState.tagMetadata
     };
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
@@ -1062,9 +1327,11 @@ function importData(e) {
             }
 
             appState.allImages = [...appState.allImages, ...data.images];
-            appState.allTags = [...new Set([...appState.allTags, ...data.tags])];
+            appState.allTags = [...new Set([...appState.allTags, ...(data.tags || [])])];
+            appState.tagMetadata = { ...appState.tagMetadata, ...(data.tagMetadata || {}) };
 
             await dbSaveTags(appState.allTags);
+            await dbSaveTagMetadata(appState.tagMetadata);
             for (const image of data.images) {
                 try {
                     await dbSaveImage(image);
@@ -1104,9 +1371,11 @@ function closeModal(id) {
     document.getElementById(id).classList.remove('active');
 }
 
-function showConfirm(text, callback) {
+function showConfirm(text, callback, isDeletion = false) {
     document.getElementById('confirmText').textContent = text;
-    document.getElementById('confirmOkBtn').onclick = callback;
+    const okBtn = document.getElementById('confirmOkBtn');
+    okBtn.textContent = isDeletion ? '삭제' : '확인';
+    okBtn.onclick = callback;
     openModal('confirmModal');
 }
 
