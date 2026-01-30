@@ -1,5 +1,5 @@
-// ====== Structured Tags Definition ======
-const STRUCTURED_TAGS_CONFIG = {
+// ====== Default Structured Tags Config ======
+const DEFAULT_STRUCTURED_TAGS_CONFIG = {
     itemCategory: {
         label: "아이템",
         values: ["상의", "아우터", "하의", "원피스", "신발"],
@@ -25,19 +25,17 @@ const appState = {
     allFreeTags: [],
     freeTagFrequency: {},
     recentFreeTags: [],
+    structuredTagsConfig: {},
     
     // Structured filters (현재 적용된 필터)
-    structuredFilters: {
-        itemCategory: null,
-        colors: [],
-        shoeType: null
-    },
+    structuredFilters: {},
     activeFreeTags: [],
     
     filterMode: 'and',
     sortBy: 'newest',
     currentEditImageId: null,
     currentTagPickerTarget: null,
+    currentEditingCategoryKey: null,
     useLocalStorage: false,
 };
 
@@ -48,6 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         initializeViewportHeight();
         await initDB();
+        loadStructuredTagsConfig();
         await loadAllData();
         setupAllEventListeners();
         switchTab('search');
@@ -72,7 +71,7 @@ function initializeViewportHeight() {
 
 async function initDB() {
     return new Promise((resolve) => {
-        const request = indexedDB.open('OutfitArchive', 2); // version 2 for new schema
+        const request = indexedDB.open('OutfitArchive', 2);
         
         request.onerror = () => {
             appState.useLocalStorage = true;
@@ -94,6 +93,30 @@ async function initDB() {
             }
         };
     });
+}
+
+function loadStructuredTagsConfig() {
+    const saved = localStorage.getItem('structuredTagsConfig');
+    if (saved) {
+        appState.structuredTagsConfig = JSON.parse(saved);
+    } else {
+        appState.structuredTagsConfig = JSON.parse(JSON.stringify(DEFAULT_STRUCTURED_TAGS_CONFIG));
+        saveStructuredTagsConfig();
+    }
+
+    // Initialize filters
+    appState.structuredFilters = {};
+    for (const key of Object.keys(appState.structuredTagsConfig)) {
+        if (appState.structuredTagsConfig[key].multi) {
+            appState.structuredFilters[key] = [];
+        } else {
+            appState.structuredFilters[key] = null;
+        }
+    }
+}
+
+function saveStructuredTagsConfig() {
+    localStorage.setItem('structuredTagsConfig', JSON.stringify(appState.structuredTagsConfig));
 }
 
 async function loadAllData() {
@@ -344,23 +367,22 @@ function setupAllEventListeners() {
         }
     });
 
-    // Tags Tab - Edit Mode
-    const editModeBtn = document.getElementById('editModeBtn');
-    if (editModeBtn) {
-        editModeBtn.addEventListener('click', () => {
-            appState.isTagEditMode = true;
-            updateTagEditMode();
-            renderTagsList();
+    // Tags Tab - Structured Categories
+    const addStructuredCategoryBtn = document.getElementById('addStructuredCategoryBtn');
+    if (addStructuredCategoryBtn) {
+        addStructuredCategoryBtn.addEventListener('click', openAddCategoryModal);
+    }
+
+    const categoryModalCancelBtn = document.getElementById('categoryModalCancelBtn');
+    if (categoryModalCancelBtn) {
+        categoryModalCancelBtn.addEventListener('click', () => {
+            closeModal('editCategoryModal');
         });
     }
 
-    const editDoneBtn = document.getElementById('editDoneBtn');
-    if (editDoneBtn) {
-        editDoneBtn.addEventListener('click', () => {
-            appState.isTagEditMode = false;
-            updateTagEditMode();
-            renderTagsList();
-        });
+    const categoryModalSaveBtn = document.getElementById('categoryModalSaveBtn');
+    if (categoryModalSaveBtn) {
+        categoryModalSaveBtn.addEventListener('click', saveCategory);
     }
 
     // Tags Search
@@ -476,25 +498,183 @@ function switchTab(tabName) {
     if (titleEl) titleEl.textContent = titles[tabName];
 
     if (tabName === 'tags') {
-        updateTagEditMode();
+        renderStructuredTagsList();
         renderTagsList();
     } else if (tabName === 'search') {
         renderStructuredFilters();
     }
 }
 
-function updateTagEditMode() {
-    const editModeBtn = document.getElementById('editModeBtn');
-    const editDoneBtn = document.getElementById('editDoneBtn');
-    const tagsTab = document.getElementById('tagsTab').classList.contains('active');
+// ====== Tags Tab - Structured Tags Management ======
+function renderStructuredTagsList() {
+    const container = document.getElementById('structuredTagsList');
+    if (!container) return;
 
-    if (appState.isTagEditMode && tagsTab) {
-        if (editModeBtn) editModeBtn.style.display = 'none';
-        if (editDoneBtn) editDoneBtn.style.display = 'block';
-    } else {
-        if (editModeBtn) editModeBtn.style.display = tagsTab ? 'block' : 'none';
-        if (editDoneBtn) editDoneBtn.style.display = 'none';
+    let html = '';
+
+    for (const [key, config] of Object.entries(appState.structuredTagsConfig)) {
+        const modeLabel = config.multi ? '다중' : '단일';
+        html += `
+            <div class="structured-category-item">
+                <div class="category-info">
+                    <div class="category-name">${config.label}</div>
+                    <div class="category-meta">${modeLabel} · ${config.values.length}개 값</div>
+                    <div class="category-values">${config.values.join(', ')}</div>
+                </div>
+                <div class="category-actions">
+                    <button class="btn-sm" onclick="openEditCategoryModal('${key}')">수정</button>
+                    <button class="btn-sm btn-danger" onclick="deleteCategory('${key}')">삭제</button>
+                </div>
+            </div>
+        `;
     }
+
+    container.innerHTML = html;
+}
+
+function openAddCategoryModal() {
+    appState.currentEditingCategoryKey = null;
+    document.getElementById('categoryModalTitle').textContent = '카테고리 추가';
+    document.getElementById('categoryNameInput').value = '';
+    document.getElementById('categoryMultiSelect').value = 'false';
+    document.getElementById('categoryValuesInput').value = '';
+    openModal('editCategoryModal');
+}
+
+function openEditCategoryModal(key) {
+    const config = appState.structuredTagsConfig[key];
+    appState.currentEditingCategoryKey = key;
+    document.getElementById('categoryModalTitle').textContent = '카테고리 수정';
+    document.getElementById('categoryNameInput').value = config.label;
+    document.getElementById('categoryMultiSelect').value = config.multi.toString();
+    document.getElementById('categoryValuesInput').value = config.values.join('\n');
+    openModal('editCategoryModal');
+}
+
+function saveCategory() {
+    const name = document.getElementById('categoryNameInput').value.trim();
+    const multi = document.getElementById('categoryMultiSelect').value === 'true';
+    const valuesText = document.getElementById('categoryValuesInput').value.trim();
+
+    if (!name || !valuesText) {
+        showToast('카테고리명과 값을 입력해주세요');
+        return;
+    }
+
+    const values = valuesText.split('\n').map(v => v.trim()).filter(v => v);
+
+    if (values.length === 0) {
+        showToast('최소 1개 이상의 값이 필요합니다');
+        return;
+    }
+
+    let key = appState.currentEditingCategoryKey;
+
+    if (!key) {
+        // 새 카테고리 추가
+        key = name.toLowerCase().replace(/\s+/g, '_');
+        if (appState.structuredTagsConfig[key]) {
+            showToast('같은 이름의 카테고리가 이미 있습니다');
+            return;
+        }
+    } else {
+        // 기존 카테고리 수정 - 이미지의 구조화 태그 업데이트
+        const oldConfig = appState.structuredTagsConfig[key];
+        if (oldConfig.label !== name) {
+            // 이름이 변경되면 모든 이미지에서 빈값으로 리셋
+            appState.allImages.forEach(img => {
+                img.structuredTags[key] = multi ? [] : null;
+            });
+        }
+    }
+
+    appState.structuredTagsConfig[key] = {
+        label: name,
+        values: values,
+        multi: multi
+    };
+
+    // 필터 초기화
+    if (multi) {
+        appState.structuredFilters[key] = [];
+    } else {
+        appState.structuredFilters[key] = null;
+    }
+
+    saveStructuredTagsConfig();
+    closeModal('editCategoryModal');
+    renderStructuredTagsList();
+    applyFilters();
+    renderStructuredFilters();
+    showToast('저장됨');
+}
+
+function deleteCategory(key) {
+    const config = appState.structuredTagsConfig[key];
+    if (confirm(`카테고리 '${config.label}'을(를) 삭제하시겠습니까?`)) {
+        // 이미지에서 이 카테고리 제거
+        appState.allImages.forEach(img => {
+            delete img.structuredTags[key];
+        });
+
+        delete appState.structuredTagsConfig[key];
+        delete appState.structuredFilters[key];
+
+        saveStructuredTagsConfig();
+        renderStructuredTagsList();
+        applyFilters();
+        renderStructuredFilters();
+        showToast('카테고리 삭제됨');
+    }
+}
+
+// ====== Tags Tab - Free Tags ======
+function renderTagsList() {
+    const list = document.getElementById('tagsList');
+    const empty = document.getElementById('tagsEmptyState');
+    const searchQuery = document.getElementById('tagsSearchInput')?.value.toLowerCase() || '';
+    const sortBy = document.getElementById('tagsSortBy')?.value || 'frequency';
+
+    if (!list || !empty) return;
+
+    let tags = [...appState.allFreeTags];
+
+    if (searchQuery) {
+        tags = tags.filter(tag => tag.toLowerCase().includes(searchQuery));
+    }
+
+    if (sortBy === 'frequency') {
+        tags.sort((a, b) => (appState.freeTagFrequency[b] || 0) - (appState.freeTagFrequency[a] || 0));
+    } else {
+        tags.sort();
+    }
+
+    if (tags.length === 0) {
+        list.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+
+    empty.style.display = 'none';
+
+    list.innerHTML = tags.map(tag => `
+        <div class="tag-list-item" onclick="addFreeTagToSearch('${tag}')">
+            <div class="tag-list-item-left">
+                <span class="tag-list-item-name">${tag}</span>
+            </div>
+            <div class="tag-list-item-right">
+                <span class="tag-count-badge">${appState.freeTagFrequency[tag] || 0}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function addFreeTagToSearch(tag) {
+    if (!appState.activeFreeTags.includes(tag)) {
+        appState.activeFreeTags.push(tag);
+    }
+    switchTab('search');
+    applyFilters();
 }
 
 // ====== Search Tab - Structured Filters ======
@@ -504,13 +684,13 @@ function renderStructuredFilters() {
 
     let html = '';
 
-    for (const [key, config] of Object.entries(STRUCTURED_TAGS_CONFIG)) {
+    for (const [key, config] of Object.entries(appState.structuredTagsConfig)) {
         const currentValue = appState.structuredFilters[key];
         let filterDisplay = '';
 
-        if (key === 'colors' && Array.isArray(currentValue) && currentValue.length > 0) {
-            filterDisplay = currentValue.map(v => `<span class="filter-chip">${v} <span class="filter-chip-remove" onclick="removeStructuredFilter('colors', '${v}')">✕</span></span>`).join('');
-        } else if (currentValue && key !== 'colors') {
+        if (config.multi && Array.isArray(currentValue) && currentValue.length > 0) {
+            filterDisplay = currentValue.map(v => `<span class="filter-chip">${v} <span class="filter-chip-remove" onclick="removeStructuredFilter('${key}', '${v}')">✕</span></span>`).join('');
+        } else if (!config.multi && currentValue) {
             filterDisplay = `<span class="filter-chip">${currentValue} <span class="filter-chip-remove" onclick="removeStructuredFilter('${key}', '${currentValue}')">✕</span></span>`;
         }
 
@@ -523,7 +703,8 @@ function renderStructuredFilters() {
 }
 
 function removeStructuredFilter(key, value) {
-    if (key === 'colors') {
+    const config = appState.structuredTagsConfig[key];
+    if (config.multi) {
         appState.structuredFilters[key] = appState.structuredFilters[key].filter(v => v !== value);
     } else {
         appState.structuredFilters[key] = null;
@@ -538,21 +719,16 @@ function applyFilters() {
 
     let filtered = appState.allImages.filter(img => {
         // Structured tag filtering
-        if (appState.structuredFilters.itemCategory && 
-            img.structuredTags.itemCategory !== appState.structuredFilters.itemCategory) {
-            return false;
-        }
+        for (const [key, config] of Object.entries(appState.structuredTagsConfig)) {
+            const filterValue = appState.structuredFilters[key];
 
-        if (appState.structuredFilters.colors.length > 0) {
-            const hasColor = appState.structuredFilters.colors.some(color => 
-                img.structuredTags.colors.includes(color)
-            );
-            if (!hasColor) return false;
-        }
-
-        if (appState.structuredFilters.shoeType && 
-            img.structuredTags.shoeType !== appState.structuredFilters.shoeType) {
-            return false;
+            if (config.multi && Array.isArray(filterValue) && filterValue.length > 0) {
+                const imgValues = img.structuredTags[key] || [];
+                const hasAny = filterValue.some(v => imgValues.includes(v));
+                if (!hasAny) return false;
+            } else if (!config.multi && filterValue) {
+                if (img.structuredTags[key] !== filterValue) return false;
+            }
         }
 
         // Free tag filtering
@@ -572,12 +748,17 @@ function applyFilters() {
 
         // Text search
         if (searchTerms.length > 0) {
-            const hasAllTerms = searchTerms.every(term =>
-                img.freeTags.some(tag => tag.toLowerCase().includes(term)) ||
-                img.structuredTags.itemCategory?.toLowerCase().includes(term) ||
-                img.structuredTags.colors.some(c => c.toLowerCase().includes(term)) ||
-                (img.memo && img.memo.toLowerCase().includes(term))
-            );
+            const hasAllTerms = searchTerms.every(term => {
+                const inFreeTags = img.freeTags.some(tag => tag.toLowerCase().includes(term));
+                const inMemo = img.memo && img.memo.toLowerCase().includes(term);
+                const inStructured = Object.values(img.structuredTags).some(v => {
+                    if (Array.isArray(v)) {
+                        return v.some(item => item.toLowerCase().includes(term));
+                    }
+                    return v && v.toLowerCase().includes(term);
+                });
+                return inFreeTags || inMemo || inStructured;
+            });
             if (!hasAllTerms) return false;
         }
 
@@ -663,55 +844,6 @@ function renderArchiveGrid() {
     `).join('');
 }
 
-// ====== Tags Tab - Free Tags ======
-function renderTagsList() {
-    const list = document.getElementById('tagsList');
-    const empty = document.getElementById('tagsEmptyState');
-    const searchQuery = document.getElementById('tagsSearchInput')?.value.toLowerCase() || '';
-    const sortBy = document.getElementById('tagsSortBy')?.value || 'frequency';
-
-    if (!list || !empty) return;
-
-    let tags = [...appState.allFreeTags];
-
-    if (searchQuery) {
-        tags = tags.filter(tag => tag.toLowerCase().includes(searchQuery));
-    }
-
-    if (sortBy === 'frequency') {
-        tags.sort((a, b) => (appState.freeTagFrequency[b] || 0) - (appState.freeTagFrequency[a] || 0));
-    } else {
-        tags.sort();
-    }
-
-    if (tags.length === 0) {
-        list.innerHTML = '';
-        empty.style.display = 'block';
-        return;
-    }
-
-    empty.style.display = 'none';
-
-    list.innerHTML = tags.map(tag => `
-        <div class="tag-list-item" onclick="addFreeTagToSearch('${tag}')">
-            <div class="tag-list-item-left">
-                <span class="tag-list-item-name">${tag}</span>
-            </div>
-            <div class="tag-list-item-right">
-                <span class="tag-count-badge">${appState.freeTagFrequency[tag] || 0}</span>
-            </div>
-        </div>
-    `).join('');
-}
-
-function addFreeTagToSearch(tag) {
-    if (!appState.activeFreeTags.includes(tag)) {
-        appState.activeFreeTags.push(tag);
-    }
-    switchTab('search');
-    applyFilters();
-}
-
 // ====== Upload ======
 async function handleFiles(files) {
     const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
@@ -729,15 +861,16 @@ async function handleFiles(files) {
             const dataURL = await fileToDataURL(file);
             const thumbnail = await generateThumbnail(dataURL);
 
+            const structuredTags = {};
+            for (const [key, config] of Object.entries(appState.structuredTagsConfig)) {
+                structuredTags[key] = config.multi ? [] : null;
+            }
+
             const imageData = {
                 id: Date.now() + i,
                 thumbnail: thumbnail,
                 original: dataURL,
-                structuredTags: {
-                    itemCategory: null,
-                    colors: [],
-                    shoeType: null
-                },
+                structuredTags: structuredTags,
                 freeTags: [],
                 memo: '',
                 createdAt: new Date().toISOString()
@@ -823,13 +956,13 @@ function renderEditStructuredTags(structuredTags) {
 
     let html = '';
 
-    for (const [key, config] of Object.entries(STRUCTURED_TAGS_CONFIG)) {
+    for (const [key, config] of Object.entries(appState.structuredTagsConfig)) {
         const currentValue = structuredTags[key];
         const label = config.label;
         
-        if (key === 'colors') {
+        if (config.multi) {
             const selectedChips = config.values.map(value => `
-                <button class="edit-structured-chip ${currentValue.includes(value) ? 'selected' : ''}" 
+                <button class="edit-structured-chip ${(currentValue || []).includes(value) ? 'selected' : ''}" 
                         onclick="toggleStructuredTagInEdit('${key}', '${value}')">
                     ${value}
                 </button>
@@ -869,6 +1002,10 @@ function setStructuredTagInEdit(key, value) {
 function toggleStructuredTagInEdit(key, value) {
     const image = appState.allImages.find(img => img.id === appState.currentEditImageId);
     if (!image) return;
+    
+    if (!image.structuredTags[key]) {
+        image.structuredTags[key] = [];
+    }
     
     const index = image.structuredTags[key].indexOf(value);
     if (index !== -1) {
@@ -943,17 +1080,18 @@ function renderTagPicker(searchQuery) {
         html += '<div class="tag-picker-section">';
         html += '<div class="tag-picker-section-title">구조화 필터</div>';
 
-        for (const [key, config] of Object.entries(STRUCTURED_TAGS_CONFIG)) {
+        for (const [key, config] of Object.entries(appState.structuredTagsConfig)) {
             const label = config.label;
             html += `<div class="structured-picker-category"><strong>${label}</strong></div>`;
             html += '<div class="tag-picker-badges">';
 
             config.values.forEach(value => {
                 let isSelected = false;
-                if (key === 'colors') {
-                    isSelected = appState.structuredFilters[key].includes(value);
+                const filterValue = appState.structuredFilters[key];
+                if (config.multi) {
+                    isSelected = filterValue.includes(value);
                 } else {
-                    isSelected = appState.structuredFilters[key] === value;
+                    isSelected = filterValue === value;
                 }
 
                 html += `
@@ -1033,7 +1171,8 @@ function renderTagPicker(searchQuery) {
 }
 
 function selectStructuredFilter(key, value) {
-    if (key === 'colors') {
+    const config = appState.structuredTagsConfig[key];
+    if (config.multi) {
         const index = appState.structuredFilters[key].indexOf(value);
         if (index !== -1) {
             appState.structuredFilters[key].splice(index, 1);
@@ -1098,7 +1237,8 @@ function exportData() {
     const data = {
         version: 2,
         images: appState.allImages,
-        freeTags: appState.allFreeTags
+        freeTags: appState.allFreeTags,
+        structuredTagsConfig: appState.structuredTagsConfig
     };
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
@@ -1127,6 +1267,11 @@ function importData(e) {
                 appState.allFreeTags = [];
             }
 
+            if (data.structuredTagsConfig) {
+                appState.structuredTagsConfig = { ...appState.structuredTagsConfig, ...data.structuredTagsConfig };
+                saveStructuredTagsConfig();
+            }
+
             appState.allImages = [...appState.allImages, ...data.images];
             appState.allFreeTags = [...new Set([...appState.allFreeTags, ...(data.freeTags || [])])];
 
@@ -1136,6 +1281,7 @@ function importData(e) {
             }
 
             await loadAllData();
+            loadStructuredTagsConfig();
             renderArchiveGrid();
             applyFilters();
             showToast('가져옴');
@@ -1164,16 +1310,6 @@ function openModal(id) {
 function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.classList.remove('active');
-}
-
-function showConfirm(text, callback) {
-    const confirmText = document.getElementById('confirmText');
-    const confirmOkBtn = document.getElementById('confirmOkBtn');
-    
-    if (confirmText) confirmText.textContent = text;
-    if (confirmOkBtn) confirmOkBtn.onclick = callback;
-    
-    openModal('confirmModal');
 }
 
 function showToast(message) {

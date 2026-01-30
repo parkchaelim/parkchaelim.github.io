@@ -87,27 +87,42 @@
 
             <!-- Tags Tab -->
             <div class="tab-content" id="tagsTab">
-                <div class="tags-search-wrapper">
-                    <input 
-                        type="text" 
-                        id="tagsSearchInput" 
-                        class="tags-search-bar"
-                        placeholder="자유 태그 검색"
-                        autocomplete="off"
-                    >
-                    <button class="tags-search-clear" id="tagsSearchClear" style="display: none;">✕</button>
+                <!-- Structured Tags Management -->
+                <div class="tags-section">
+                    <div class="tags-section-header">
+                        <h3>구조화 태그 관리</h3>
+                        <button class="btn-sm" id="addStructuredCategoryBtn">+ 카테고리 추가</button>
+                    </div>
+                    <div class="structured-tags-list" id="structuredTagsList"></div>
                 </div>
 
-                <div class="tags-sort-control">
-                    <select id="tagsSortBy">
-                        <option value="frequency">자주 사용</option>
-                        <option value="alphabetic">가나다</option>
-                    </select>
-                </div>
+                <!-- Free Tags Management -->
+                <div class="tags-section">
+                    <div class="tags-section-header">
+                        <h3>자유 태그</h3>
+                    </div>
+                    <div class="tags-search-wrapper">
+                        <input 
+                            type="text" 
+                            id="tagsSearchInput" 
+                            class="tags-search-bar"
+                            placeholder="자유 태그 검색"
+                            autocomplete="off"
+                        >
+                        <button class="tags-search-clear" id="tagsSearchClear" style="display: none;">✕</button>
+                    </div>
 
-                <div class="tags-list" id="tagsList"></div>
-                <div class="empty-state" id="tagsEmptyState" style="display: none;">
-                    <p>자유 태그가 없어요</p>
+                    <div class="tags-sort-control">
+                        <select id="tagsSortBy">
+                            <option value="frequency">자주 사용</option>
+                            <option value="alphabetic">가나다</option>
+                        </select>
+                    </div>
+
+                    <div class="tags-list" id="tagsList"></div>
+                    <div class="empty-state" id="tagsEmptyState" style="display: none;">
+                        <p>자유 태그가 없어요</p>
+                    </div>
                 </div>
             </div>
 
@@ -226,6 +241,39 @@
                 </div>
 
                 <button class="btn-primary btn-block" id="editSaveBtn">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Structured Category Modal -->
+    <div class="modal" id="editCategoryModal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-body">
+                <h3 id="categoryModalTitle">카테고리 추가</h3>
+                
+                <div class="form-group">
+                    <label>카테고리명</label>
+                    <input type="text" id="categoryNameInput" class="form-input" placeholder="예: 상의, 색상">
+                </div>
+
+                <div class="form-group">
+                    <label>선택 모드</label>
+                    <select id="categoryMultiSelect" class="form-input">
+                        <option value="false">단일선택</option>
+                        <option value="true">다중선택</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>값 (쉼표로 구분)</label>
+                    <textarea id="categoryValuesInput" class="memo-input" placeholder="상의,아우터,하의&#10;한 줄에 한 개씩 입력해도 됨" style="height: 120px;"></textarea>
+                </div>
+
+                <div class="confirm-actions">
+                    <button class="btn-secondary" id="categoryModalCancelBtn">취소</button>
+                    <button class="btn-primary" id="categoryModalSaveBtn">저장</button>
+                </div>
             </div>
         </div>
     </div>

@@ -1312,3 +1312,122 @@ html, body {
 .structured-picker-category:first-of-type {
     margin-top: 0;
 }
+
+/* Tags Section */
+.tags-section {
+    background-color: var(--bg-primary);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
+}
+
+.tags-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.tags-section-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+/* Structured Tags List */
+.structured-tags-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.structured-category-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px;
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+.category-info {
+    flex: 1;
+}
+
+.category-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.category-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.category-values {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.category-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: 12px;
+    flex-shrink: 0;
+}
+
+/* Form Inputs */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+}
+
+.form-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background-color: var(--bg-primary);
+}
+
+.memo-input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    min-height: 100px;
+    resize: vertical;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.memo-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background-color: var(--bg-primary);
+}
