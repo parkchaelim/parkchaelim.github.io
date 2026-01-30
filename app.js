@@ -467,6 +467,14 @@ function setupAllEventListeners() {
         });
     }
 
+// Tags Tab - Add Free Tag
+    const addFreeTagBtn = document.getElementById('addFreeTagBtn');
+    if (addFreeTagBtn) {
+        addFreeTagBtn.addEventListener('click', openAddFreeTagModal);
+    }
+
+
+
     // Tag Picker
     const tagPickerSearch = document.getElementById('tagPickerSearch');
     if (tagPickerSearch) {
@@ -658,23 +666,16 @@ function renderTagsList() {
     empty.style.display = 'none';
 
     list.innerHTML = tags.map(tag => `
-        <div class="tag-list-item" onclick="addFreeTagToSearch('${tag}')">
-            <div class="tag-list-item-left">
+        <div class="tag-list-item">
+            <div class="tag-list-item-left" onclick="addFreeTagToSearch('${tag}')">
                 <span class="tag-list-item-name">${tag}</span>
+                <span class="tag-item-usage">${appState.freeTagFrequency[tag] || 0}개</span>
             </div>
             <div class="tag-list-item-right">
-                <span class="tag-count-badge">${appState.freeTagFrequency[tag] || 0}</span>
+                <button class="btn-sm btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="deleteFreeTags('${tag}')">삭제</button>
             </div>
         </div>
     `).join('');
-}
-
-function addFreeTagToSearch(tag) {
-    if (!appState.activeFreeTags.includes(tag)) {
-        appState.activeFreeTags.push(tag);
-    }
-    switchTab('search');
-    applyFilters();
 }
 
 // ====== Search Tab - Structured Filters ======
@@ -1329,4 +1330,66 @@ function updateInfoDisplay() {
 
     if (imageCount) imageCount.textContent = appState.allImages.length;
     if (tagCount) tagCount.textContent = appState.allFreeTags.length;
+}
+
+
+
+// ====== Add Free Tag Modal ======
+function openAddFreeTagModal() {
+    const newTag = prompt('추가할 태그명을 입력하세요');
+    if (!newTag) return;
+
+    const trimmed = newTag.trim();
+    if (!trimmed) {
+        showToast('태그명을 입력해주세요');
+        return;
+    }
+
+    if (appState.allFreeTags.includes(trimmed)) {
+        showToast('이미 있는 태그입니다');
+        return;
+    }
+
+    addNewFreeTagImmediate(trimmed);
+}
+
+async function addNewFreeTagImmediate(tag) {
+    appState.allFreeTags.push(tag);
+    appState.allFreeTags.sort();
+    await dbSaveFreeTags(appState.allFreeTags);
+    appState.freeTagFrequency[tag] = 0;
+    renderTagsList();
+    updateInfoDisplay();
+    showToast(`'${tag}' 추가됨`);
+}
+
+async function deleteFreeTags(tag) {
+    const count = appState.freeTagFrequency[tag] || 0;
+    if (count > 0) {
+        if (!confirm(`이 태그가 ${count}개 이미지에 적용되어 있습니다.\n삭제하시겠습니까?`)) {
+            return;
+        }
+        // 모든 이미지에서 이 태그 제거
+        appState.allImages.forEach(img => {
+            img.freeTags = img.freeTags.filter(t => t !== tag);
+        });
+        // 각 이미지 업데이트
+        for (const img of appState.allImages) {
+            await dbUpdateImage(img);
+        }
+    } else {
+        if (!confirm(`'${tag}'을 삭제하시겠습니까?`)) {
+            return;
+        }
+    }
+
+    appState.allFreeTags = appState.allFreeTags.filter(t => t !== tag);
+    delete appState.freeTagFrequency[tag];
+    await dbSaveFreeTags(appState.allFreeTags);
+    
+    renderTagsList();
+    applyFilters();
+    renderSearchGrid();
+    updateInfoDisplay();
+    showToast('삭제됨');
 }
