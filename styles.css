@@ -80,7 +80,19 @@ html, body {
     justify-content: flex-end;
 }
 
-.btn-select-mode {
+.btn-select-mode,
+.btn-edit-mode {
+    padding: 8px 16px;
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-edit-done {
     padding: 8px 16px;
     background-color: var(--primary);
     color: white;
@@ -389,32 +401,118 @@ html, body {
     flex: 1;
 }
 
-/* Tags */
-.tags-header {
+/* Tags Tab */
+.tags-search-wrapper {
+    position: relative;
     margin-bottom: 12px;
 }
 
-.tags-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+.tags-search-bar {
+    width: 100%;
+    padding: 10px 36px 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 16px;
+    background-color: var(--bg-secondary);
 }
 
-.tag-item {
-    padding: 10px 14px;
-    background-color: var(--bg-primary);
+.tags-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    color: var(--text-secondary);
+    font-size: 16px;
+}
+
+.tags-sort-control {
+    margin-bottom: 12px;
+}
+
+.tags-sort-control select {
+    width: 100%;
+    padding: 10px;
+    background-color: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s;
+    color: var(--text-primary);
+}
+
+.tags-list {
+    background-color: var(--bg-primary);
+    border-radius: var(--radius);
+    overflow: hidden;
     box-shadow: var(--shadow-sm);
 }
 
-.tag-item:active {
-    background-color: var(--primary);
+.tag-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.tag-list-item:last-child {
+    border-bottom: none;
+}
+
+.tag-list-item:active {
+    background-color: var(--bg-secondary);
+}
+
+.tag-list-item-left {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tag-list-item-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.tag-list-item-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tag-count-badge {
+    font-size: 13px;
+    color: var(--text-secondary);
+    background-color: var(--bg-secondary);
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.tag-delete-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: var(--danger);
     color: white;
-    border-color: var(--primary);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.tag-delete-btn:active {
+    opacity: 0.8;
 }
 
 /* Settings */
@@ -739,6 +837,13 @@ html, body {
     font-size: 15px;
 }
 
+.modal-body h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+}
+
 /* Upload Area */
 .upload-area {
     border: 2px dashed var(--border);
@@ -839,6 +944,17 @@ html, body {
     background-color: var(--bg-secondary);
 }
 
+/* Form Input */
+.form-input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    margin-bottom: 16px;
+    background-color: var(--bg-secondary);
+}
+
 /* Confirm Modal */
 .confirm-actions {
     display: flex;
@@ -849,6 +965,13 @@ html, body {
 .confirm-actions .btn-secondary,
 .confirm-actions .btn-danger {
     flex: 1;
+}
+
+.confirm-extra {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 12px 0;
+    line-height: 1.5;
 }
 
 /* Image Viewer */
