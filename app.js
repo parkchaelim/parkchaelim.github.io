@@ -121,35 +121,6 @@ class DatabaseManager {
         });
     }
 
-    async exportData() {
-        const images = await this.getAllImages();
-        const tags = await this.getTags();
-        return {
-            version: this.version,
-            exportDate: new Date().toISOString(),
-            images,
-            tags
-        };
-    }
-
-    async importData(data, merge = false) {
-        if (!merge) {
-            await this.clearAll();
-        }
-
-        for (const image of data.images) {
-            try {
-                await this.saveImage(image);
-            } catch (e) {
-                console.warn('Error importing image:', e);
-            }
-        }
-
-        const existingTags = await this.getTags();
-        const allTags = [...new Set([...existingTags, ...data.tags])];
-        await this.saveTags(allTags);
-    }
-
     async clearAll() {
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['images', 'tags'], 'readwrite');
@@ -330,6 +301,7 @@ class UIManager {
         this.scrollPosition = {};
         this.selectedImageIds = new Set();
         this.currentCategory = 'recent';
+        this.currentTab = 'storage';
         this.setupEventListeners();
     }
 
@@ -355,6 +327,24 @@ class UIManager {
         document.getElementById('quickFileInput').addEventListener('change', (e) => {
             this.handleFiles(e.target.files);
             e.target.value = '';
+        });
+
+        // Grid Selector
+        document.querySelectorAll('.grid-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                const cols = e.target.dataset.cols;
+                const grid = document.getElementById('galleryGrid');
+                const searchGrid = document.getElementById('searchResultGrid');
+                
+                grid.className = `gallery-grid gallery-grid-${cols}col`;
+                searchGrid.className = `gallery-grid gallery-grid-${cols}col`;
+                
+                // Save preference
+                localStorage.setItem('gridCols', cols);
+            });
         });
 
         // Upload Modal
@@ -505,23 +495,15 @@ class UIManager {
         document.getElementById('deleteCancel').addEventListener('click', () => {
             document.getElementById('deleteActionSheet').style.display = 'none';
         });
-
-        // Export/Import
-        document.getElementById('exportBtn').addEventListener('click', () => this.exportData());
-        document.getElementById('importBtn').addEventListener('click', () => {
-            document.getElementById('importFile').click();
-        });
-        document.getElementById('importFile').addEventListener('change', (e) => {
-            this.importData(e.target.files[0]);
-            e.target.value = '';
-        });
     }
 
     switchTab(tabName) {
         // Save scroll position
         if (this.currentTab === 'storage') {
             const gallery = document.getElementById('galleryGrid');
-            this.scrollPosition['storage'] = gallery.parentElement.scrollTop;
+            if (gallery && gallery.parentElement) {
+                this.scrollPosition['storage'] = gallery.parentElement.scrollTop;
+            }
         }
 
         // Update tabs
@@ -537,8 +519,10 @@ class UIManager {
         if (tabName === 'storage') {
             // Restore scroll position
             setTimeout(() => {
-                document.getElementById('galleryGrid').parentElement.scrollTop = 
-                    this.scrollPosition['storage'] || 0;
+                const gallery = document.getElementById('galleryGrid');
+                if (gallery && gallery.parentElement) {
+                    gallery.parentElement.scrollTop = this.scrollPosition['storage'] || 0;
+                }
             }, 0);
         }
     }
@@ -860,6 +844,19 @@ class UIManager {
             this.currentImages = await this.db.getAllImages();
             this.renderGallery();
             this.updateRecentTags();
+            
+            // Load saved grid preference
+            const savedCols = localStorage.getItem('gridCols') || '3';
+            const gridBtn = document.querySelector(`[data-cols="${savedCols}"]`);
+            if (gridBtn) {
+                document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('active'));
+                gridBtn.classList.add('active');
+                
+                const grid = document.getElementById('galleryGrid');
+                const searchGrid = document.getElementById('searchResultGrid');
+                grid.className = `gallery-grid gallery-grid-${savedCols}col`;
+                searchGrid.className = `gallery-grid gallery-grid-${savedCols}col`;
+            }
         } catch (error) {
             this.showToast(`로드 실패: ${error.message}`, 'error');
         }
@@ -980,46 +977,6 @@ class UIManager {
             selectionCount.textContent = `${count}개 선택`;
         } else {
             selectionBar.style.display = 'none';
-        }
-    }
-
-    async exportData() {
-        try {
-            const data = await this.db.exportData();
-            const json = JSON.stringify(data, null, 2);
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `outfit-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-            this.showToast('내보내졌습니다.');
-        } catch (error) {
-            this.showToast(`내보내기 실패: ${error.message}`, 'error');
-        }
-    }
-
-    async importData(file) {
-        if (!file) return;
-
-        try {
-            const text = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = () => reject(reader.error);
-                reader.readAsText(file);
-            });
-
-            const data = JSON.parse(text);
-            const merge = confirm('기존 데이터와 병합?');
-            
-            await this.db.importData(data, merge);
-            await this.tagManager.initTags();
-            await this.loadImages();
-            this.showToast('가져와졌습니다.');
-        } catch (error) {
-            this.showToast(`가져오기 실패: ${error.message}`, 'error');
         }
     }
 
