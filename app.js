@@ -302,6 +302,14 @@ class UIManager {
     }
 
     setupEventListeners() {
+        // Tab Navigation
+        document.getElementById('searchTab').addEventListener('click', () => {
+            this.switchTab('search');
+        });
+        document.getElementById('allTab').addEventListener('click', () => {
+            this.switchTab('all');
+        });
+
         // Upload
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
@@ -632,6 +640,7 @@ class UIManager {
         try {
             this.currentImages = await this.db.getAllImages();
             this.applyFilters();
+            this.renderGalleryFull();
         } catch (error) {
             this.showToast(`로드 실패: ${error.message}`, 'error');
         }
@@ -716,9 +725,23 @@ class UIManager {
         }
     }
 
-    renderGallery() {
-        const grid = document.getElementById('galleryGrid');
-        const emptyState = document.getElementById('emptyState');
+    switchTab(tabName) {
+        // 탭 버튼 업데이트
+        document.getElementById('searchTab').classList.toggle('active', tabName === 'search');
+        document.getElementById('allTab').classList.toggle('active', tabName === 'all');
+
+        // 탭 컨텐츠 업데이트
+        document.getElementById('searchTabContent').classList.toggle('active', tabName === 'search');
+        document.getElementById('allTabContent').classList.toggle('active', tabName === 'all');
+
+        if (tabName === 'all') {
+            this.renderGalleryFull();
+        }
+    }
+
+    renderGalleryFull() {
+        const grid = document.getElementById('galleryGridFull');
+        const emptyState = document.getElementById('emptyStateAll');
 
         if (this.currentImages.length === 0) {
             grid.innerHTML = '';
@@ -726,47 +749,21 @@ class UIManager {
             return;
         }
 
-        if (this.filteredImages.length === 0) {
-            grid.innerHTML = '';
-            emptyState.innerHTML = '<p>검색 결과가 없습니다.</p><p class="small">다른 검색어를 시도해보세요.</p>';
-            emptyState.style.display = 'block';
-            return;
-        }
-
         emptyState.style.display = 'none';
-        grid.innerHTML = this.filteredImages.map(image => `
-            <div class="image-card" data-id="${image.id}">
-                <img src="${image.thumbnail}" alt="thumbnail" class="image-card-image">
-                <div class="image-card-info">
-                    <div class="image-card-date">
-                        ${new Date(image.createdAt).toLocaleDateString('ko-KR')}
-                    </div>
-                    ${image.tags.length > 0 ? `
-                        <div class="image-card-tags">
-                            ${image.tags.map(tag => `
-                                <span class="image-card-tag">${tag}</span>
-                            `).join('')}
-                        </div>
-                    ` : ''}
-                    ${image.memo ? `<div class="image-card-memo">${escapeHtml(image.memo)}</div>` : ''}
-                </div>
+        
+        // 최신순으로 정렬
+        const sorted = SearchManager.sortImages([...this.currentImages], 'newest');
+        
+        grid.innerHTML = sorted.map(image => `
+            <div class="image-card-pure" data-id="${image.id}">
+                <img src="${image.thumbnail}" alt="thumbnail">
             </div>
         `).join('');
 
-        grid.querySelectorAll('.image-card').forEach(card => {
+        grid.querySelectorAll('.image-card-pure').forEach(card => {
             card.addEventListener('click', () => {
                 const imageId = parseInt(card.dataset.id);
                 this.openEditModal(imageId);
-            });
-
-            card.querySelectorAll('.image-card-tag').forEach(tag => {
-                tag.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const searchInput = document.getElementById('searchInput');
-                    searchInput.value = tag.textContent;
-                    this.updateClearButton();
-                    this.applyFilters();
-                });
             });
         });
     }
