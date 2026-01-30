@@ -18,8 +18,16 @@
             </div>
         </header>
 
-        <!-- Search Section - 메인 포커스 -->
-        <section class="search-hero">
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button id="searchTab" class="tab-button active" aria-label="검색 탭">검색</button>
+            <button id="allTab" class="tab-button" aria-label="전체 이미지 탭">전체</button>
+        </div>
+
+        <!-- Search Tab Content -->
+        <div id="searchTabContent" class="tab-content active">
+            <!-- Search Section - 메인 포커스 -->
+            <section class="search-hero">
             <div class="search-container">
                 <input 
                     type="text" 
@@ -71,6 +79,18 @@
                 <p class="small">위에서 이미지를 추가해보세요.</p>
             </div>
         </section>
+        </div>
+
+        <!-- All Tab Content - 순수 갤러리 -->
+        <div id="allTabContent" class="tab-content">
+            <section class="gallery-section gallery-full">
+                <div id="galleryGridFull" class="gallery-grid-full"></div>
+                <div id="emptyStateAll" class="empty-state" style="display: none;">
+                    <p>아직 저장된 이미지가 없습니다.</p>
+                    <p class="small">검색 탭에서 이미지를 추가해보세요.</p>
+                </div>
+            </section>
+        </div>
     </div>
 
     <!-- Image Detail & Edit Modal -->
