@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>채림's 옷장</title>
+    <title>Outfit Archive</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -14,13 +14,15 @@
                 <h1 class="header-title" id="headerTitle">검색</h1>
             </div>
             <div class="header-right">
-                <button class="header-btn" id="headerActionBtn" style="display: none;">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="1"></circle>
-                        <circle cx="19" cy="12" r="1"></circle>
-                        <circle cx="5" cy="12" r="1"></circle>
-                    </svg>
+                <button class="btn-select-mode" id="selectModeBtn" style="display: none;">
+                    선택
                 </button>
+                <div class="select-mode-bar" id="selectModeBar" style="display: none;">
+                    <span id="selectionCount">0개 선택</span>
+                    <button class="btn-header-sm" id="selectAllBtn">전체</button>
+                    <button class="btn-header-sm" id="deselectAllBtn">해제</button>
+                    <button class="btn-header-done" id="selectDoneBtn">완료</button>
+                </div>
             </div>
         </header>
 
@@ -88,13 +90,6 @@
             <div class="tab-content" id="archiveTab">
                 <div class="archive-header">
                     <button class="btn-primary" id="addImageBtn">+ 이미지 추가</button>
-                    <button class="btn-secondary" id="selectModeBtn">선택</button>
-                </div>
-
-                <div class="multi-select-bar" id="multiSelectBar" style="display: none;">
-                    <span id="selectionCount">0개 선택</span>
-                    <button class="btn-sm" id="selectAllBtn">전체</button>
-                    <button class="btn-sm" id="deselectAllBtn">해제</button>
                 </div>
 
                 <div class="grid-container" id="archiveGrid"></div>
@@ -149,6 +144,13 @@
                 </div>
             </div>
         </main>
+
+        <!-- Multi-Select Action Bar (선택모드) -->
+        <div class="multi-action-bar" id="multiActionBar" style="display: none;">
+            <button class="action-btn" id="addTagsSelectedBtn">태그 추가</button>
+            <button class="action-btn" id="removeTagsSelectedBtn">태그 제거</button>
+            <button class="action-btn action-danger" id="deleteSelectedBtn">삭제</button>
+        </div>
 
         <!-- Bottom Tab Bar -->
         <nav class="bottom-tab-bar">
@@ -276,24 +278,8 @@
                 <p id="confirmText"></p>
                 <div class="confirm-actions">
                     <button class="btn-secondary" id="confirmCancelBtn">취소</button>
-                    <button class="btn-danger" id="confirmOkBtn">확인</button>
+                    <button class="btn-danger" id="confirmOkBtn">삭제</button>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Multi-select Actions Modal -->
-    <div class="modal" id="multiSelectActionsModal">
-        <div class="modal-overlay"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>선택 항목</h2>
-                <button class="modal-close" onclick="closeModal('multiSelectActionsModal')">✕</button>
-            </div>
-            <div class="modal-body">
-                <button class="btn-block" id="addTagsToSelectedBtn">태그 추가</button>
-                <button class="btn-block" id="removeTagsFromSelectedBtn">태그 제거</button>
-                <button class="btn-block btn-danger" id="deleteSelectedBtn">삭제</button>
             </div>
         </div>
     </div>
