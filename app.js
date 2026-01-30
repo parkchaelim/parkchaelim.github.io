@@ -1,19 +1,43 @@
+// ====== Structured Tags Definition ======
+const STRUCTURED_TAGS_CONFIG = {
+    itemCategory: {
+        label: "아이템",
+        values: ["상의", "아우터", "하의", "원피스", "신발"],
+        multi: false
+    },
+    colors: {
+        label: "색상",
+        values: ["흰색", "검정", "회색", "베이지", "브라운", "네이비", "블루", "그린", "올리브", "카키", "레드", "핑크"],
+        multi: true
+    },
+    shoeType: {
+        label: "신발종류",
+        values: ["스니커즈", "부츠", "로퍼", "샌들", "힐"],
+        multi: false
+    }
+};
+
 // ====== Global State ======
 const appState = {
     db: null,
     allImages: [],
     filteredImages: [],
-    allTags: [],
-    tagFrequency: {},
-    recentTags: [],
-    activeSearchTags: [],
+    allFreeTags: [],
+    freeTagFrequency: {},
+    recentFreeTags: [],
+    
+    // Structured filters (현재 적용된 필터)
+    structuredFilters: {
+        itemCategory: null,
+        colors: [],
+        shoeType: null
+    },
+    activeFreeTags: [],
+    
     filterMode: 'and',
     sortBy: 'newest',
     currentEditImageId: null,
     currentTagPickerTarget: null,
-    isTagEditMode: false,
-    currentTagToRename: null,
-    currentTagToDelete: null,
     useLocalStorage: false,
 };
 
@@ -48,7 +72,7 @@ function initializeViewportHeight() {
 
 async function initDB() {
     return new Promise((resolve) => {
-        const request = indexedDB.open('OutfitArchive', 1);
+        const request = indexedDB.open('OutfitArchive', 2); // version 2 for new schema
         
         request.onerror = () => {
             appState.useLocalStorage = true;
@@ -65,8 +89,8 @@ async function initDB() {
             if (!db.objectStoreNames.contains('images')) {
                 db.createObjectStore('images', { keyPath: 'id' });
             }
-            if (!db.objectStoreNames.contains('tags')) {
-                db.createObjectStore('tags', { keyPath: 'name' });
+            if (!db.objectStoreNames.contains('freeTags')) {
+                db.createObjectStore('freeTags', { keyPath: 'name' });
             }
         };
     });
@@ -74,25 +98,16 @@ async function initDB() {
 
 async function loadAllData() {
     appState.allImages = await dbGetAllImages();
-    appState.allTags = await dbGetTags();
+    appState.allFreeTags = await dbGetFreeTags();
 
-    if (appState.allTags.length === 0) {
-        appState.allTags = [
-            '꾸안꾸', '꾸꾸꾸',
-            '가디건', '원피스', '치마', '바지', '코트', '자켓', '니트', '스니커즈', '부츠', '로퍼', '샌들', '가방', '머플러',
-            '흰색', '검정', '회색', '베이지', '브라운', '네이비', '블루', '그린', '올리브', '카키', '레드', '핑크'
-        ];
-        await dbSaveTags(appState.allTags);
-    }
-
-    appState.tagFrequency = {};
+    appState.freeTagFrequency = {};
     appState.allImages.forEach(img => {
-        img.tags.forEach(tag => {
-            appState.tagFrequency[tag] = (appState.tagFrequency[tag] || 0) + 1;
+        img.freeTags.forEach(tag => {
+            appState.freeTagFrequency[tag] = (appState.freeTagFrequency[tag] || 0) + 1;
         });
     });
 
-    appState.recentTags = JSON.parse(localStorage.getItem('recentTags') || '[]');
+    appState.recentFreeTags = JSON.parse(localStorage.getItem('recentFreeTags') || '[]');
     updateInfoDisplay();
 }
 
@@ -172,13 +187,13 @@ function dbDeleteImage(id) {
     });
 }
 
-function dbGetTags() {
+function dbGetFreeTags() {
     if (appState.useLocalStorage) {
-        return Promise.resolve(JSON.parse(localStorage.getItem('tags') || '[]'));
+        return Promise.resolve(JSON.parse(localStorage.getItem('freeTags') || '[]'));
     }
     return new Promise((resolve, reject) => {
-        const transaction = appState.db.transaction(['tags'], 'readonly');
-        const store = transaction.objectStore('tags');
+        const transaction = appState.db.transaction(['freeTags'], 'readonly');
+        const store = transaction.objectStore('freeTags');
         const request = store.getAll();
         request.onsuccess = () => {
             const tags = request.result.map(item => item.name);
@@ -188,14 +203,14 @@ function dbGetTags() {
     });
 }
 
-function dbSaveTags(tags) {
+function dbSaveFreeTags(tags) {
     if (appState.useLocalStorage) {
-        localStorage.setItem('tags', JSON.stringify(tags));
+        localStorage.setItem('freeTags', JSON.stringify(tags));
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
-        const transaction = appState.db.transaction(['tags'], 'readwrite');
-        const store = transaction.objectStore('tags');
+        const transaction = appState.db.transaction(['freeTags'], 'readwrite');
+        const store = transaction.objectStore('freeTags');
         store.clear();
         tags.forEach(tag => store.add({ name: tag }));
         transaction.oncomplete = () => resolve();
@@ -209,9 +224,9 @@ function dbClearAll() {
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
-        const transaction = appState.db.transaction(['images', 'tags'], 'readwrite');
+        const transaction = appState.db.transaction(['images', 'freeTags'], 'readwrite');
         transaction.objectStore('images').clear();
-        transaction.objectStore('tags').clear();
+        transaction.objectStore('freeTags').clear();
         transaction.oncomplete = () => resolve();
         transaction.onerror = () => reject(transaction.error);
     });
@@ -422,24 +437,6 @@ function setupAllEventListeners() {
         });
     }
 
-    // Rename Tag Modal
-    const renameTagCancelBtn = document.getElementById('renameTagCancelBtn');
-    if (renameTagCancelBtn) {
-        renameTagCancelBtn.addEventListener('click', () => {
-            closeModal('renameTagModal');
-        });
-    }
-
-    const renameTagOkBtn = document.getElementById('renameTagOkBtn');
-    if (renameTagOkBtn) {
-        renameTagOkBtn.addEventListener('click', () => {
-            const newName = document.getElementById('renameTagInput').value.trim();
-            if (newName && appState.currentTagToRename) {
-                renameTag(appState.currentTagToRename, newName);
-            }
-        });
-    }
-
     // Confirm Modal
     const confirmCancelBtn = document.getElementById('confirmCancelBtn');
     if (confirmCancelBtn) {
@@ -481,10 +478,11 @@ function switchTab(tabName) {
     if (tabName === 'tags') {
         updateTagEditMode();
         renderTagsList();
+    } else if (tabName === 'search') {
+        renderStructuredFilters();
     }
 }
 
-// ====== Tags Tab - Edit Mode ======
 function updateTagEditMode() {
     const editModeBtn = document.getElementById('editModeBtn');
     const editDoneBtn = document.getElementById('editDoneBtn');
@@ -499,27 +497,88 @@ function updateTagEditMode() {
     }
 }
 
-// ====== Search Tab ======
+// ====== Search Tab - Structured Filters ======
+function renderStructuredFilters() {
+    const container = document.getElementById('structuredFilters');
+    if (!container) return;
+
+    let html = '';
+
+    for (const [key, config] of Object.entries(STRUCTURED_TAGS_CONFIG)) {
+        const currentValue = appState.structuredFilters[key];
+        let filterDisplay = '';
+
+        if (key === 'colors' && Array.isArray(currentValue) && currentValue.length > 0) {
+            filterDisplay = currentValue.map(v => `<span class="filter-chip">${v} <span class="filter-chip-remove" onclick="removeStructuredFilter('colors', '${v}')">✕</span></span>`).join('');
+        } else if (currentValue && key !== 'colors') {
+            filterDisplay = `<span class="filter-chip">${currentValue} <span class="filter-chip-remove" onclick="removeStructuredFilter('${key}', '${currentValue}')">✕</span></span>`;
+        }
+
+        if (filterDisplay) {
+            html += `<div class="structured-filter-group">${filterDisplay}</div>`;
+        }
+    }
+
+    container.innerHTML = html || '';
+}
+
+function removeStructuredFilter(key, value) {
+    if (key === 'colors') {
+        appState.structuredFilters[key] = appState.structuredFilters[key].filter(v => v !== value);
+    } else {
+        appState.structuredFilters[key] = null;
+    }
+    applyFilters();
+}
+
+// ====== Search Tab - Apply Filters ======
 function applyFilters() {
     const searchText = document.getElementById('searchInput')?.value.toLowerCase() || '';
     const searchTerms = searchText.split(/\s+/).filter(t => t);
 
     let filtered = appState.allImages.filter(img => {
+        // Structured tag filtering
+        if (appState.structuredFilters.itemCategory && 
+            img.structuredTags.itemCategory !== appState.structuredFilters.itemCategory) {
+            return false;
+        }
+
+        if (appState.structuredFilters.colors.length > 0) {
+            const hasColor = appState.structuredFilters.colors.some(color => 
+                img.structuredTags.colors.includes(color)
+            );
+            if (!hasColor) return false;
+        }
+
+        if (appState.structuredFilters.shoeType && 
+            img.structuredTags.shoeType !== appState.structuredFilters.shoeType) {
+            return false;
+        }
+
+        // Free tag filtering
+        if (appState.activeFreeTags.length > 0) {
+            if (appState.filterMode === 'and') {
+                const hasAllTags = appState.activeFreeTags.every(tag => 
+                    img.freeTags.includes(tag)
+                );
+                if (!hasAllTags) return false;
+            } else {
+                const hasAnyTag = appState.activeFreeTags.some(tag => 
+                    img.freeTags.includes(tag)
+                );
+                if (!hasAnyTag) return false;
+            }
+        }
+
+        // Text search
         if (searchTerms.length > 0) {
             const hasAllTerms = searchTerms.every(term =>
-                img.tags.some(tag => tag.toLowerCase().includes(term)) ||
+                img.freeTags.some(tag => tag.toLowerCase().includes(term)) ||
+                img.structuredTags.itemCategory?.toLowerCase().includes(term) ||
+                img.structuredTags.colors.some(c => c.toLowerCase().includes(term)) ||
                 (img.memo && img.memo.toLowerCase().includes(term))
             );
             if (!hasAllTerms) return false;
-        }
-
-        if (appState.activeSearchTags.length > 0) {
-            const imageTags = img.tags.map(t => t.toLowerCase());
-            if (appState.filterMode === 'and') {
-                return appState.activeSearchTags.every(tag => imageTags.includes(tag));
-            } else {
-                return appState.activeSearchTags.some(tag => imageTags.includes(tag));
-            }
         }
 
         return true;
@@ -532,6 +591,7 @@ function applyFilters() {
     });
 
     appState.filteredImages = filtered;
+    renderStructuredFilters();
     renderSelectedFilters();
     renderSearchGrid();
 }
@@ -540,7 +600,7 @@ function renderSelectedFilters() {
     const container = document.getElementById('selectedFilters');
     if (!container) return;
 
-    container.innerHTML = appState.activeSearchTags.map(tag => `
+    container.innerHTML = appState.activeFreeTags.map(tag => `
         <div class="filter-chip">
             ${tag}
             <span class="filter-chip-remove" onclick="removeSearchTag('${tag}')">✕</span>
@@ -549,7 +609,7 @@ function renderSelectedFilters() {
 }
 
 function removeSearchTag(tag) {
-    appState.activeSearchTags = appState.activeSearchTags.filter(t => t !== tag);
+    appState.activeFreeTags = appState.activeFreeTags.filter(t => t !== tag);
     applyFilters();
 }
 
@@ -570,7 +630,7 @@ function renderSearchGrid() {
     empty.style.display = 'none';
     info.textContent = `${appState.filteredImages.length}개`;
 
-    grid.innerHTML = appState.filteredImages.map((img, idx) => `
+    grid.innerHTML = appState.filteredImages.map((img) => `
         <div class="image-card" data-id="${img.id}" onclick="openEditModal(${img.id})">
             <img src="${img.thumbnail}" alt="image" style="object-fit: contain;">
         </div>
@@ -603,7 +663,7 @@ function renderArchiveGrid() {
     `).join('');
 }
 
-// ====== Tags Tab ======
+// ====== Tags Tab - Free Tags ======
 function renderTagsList() {
     const list = document.getElementById('tagsList');
     const empty = document.getElementById('tagsEmptyState');
@@ -612,14 +672,14 @@ function renderTagsList() {
 
     if (!list || !empty) return;
 
-    let tags = [...appState.allTags];
+    let tags = [...appState.allFreeTags];
 
     if (searchQuery) {
         tags = tags.filter(tag => tag.toLowerCase().includes(searchQuery));
     }
 
     if (sortBy === 'frequency') {
-        tags.sort((a, b) => (appState.tagFrequency[b] || 0) - (appState.tagFrequency[a] || 0));
+        tags.sort((a, b) => (appState.freeTagFrequency[b] || 0) - (appState.freeTagFrequency[a] || 0));
     } else {
         tags.sort();
     }
@@ -632,136 +692,24 @@ function renderTagsList() {
 
     empty.style.display = 'none';
 
-    if (appState.isTagEditMode) {
-        list.innerHTML = tags.map(tag => `
-            <div class="tag-list-item">
-                <div class="tag-list-item-left" onclick="openRenameTagModal('${tag}')">
-                    <span class="tag-list-item-name">${tag}</span>
-                </div>
-                <div class="tag-list-item-right">
-                    <span class="tag-count-badge">${appState.tagFrequency[tag] || 0}</span>
-                    <button class="tag-delete-btn" onclick="openDeleteTagConfirm('${tag}')">−</button>
-                </div>
+    list.innerHTML = tags.map(tag => `
+        <div class="tag-list-item" onclick="addFreeTagToSearch('${tag}')">
+            <div class="tag-list-item-left">
+                <span class="tag-list-item-name">${tag}</span>
             </div>
-        `).join('');
-    } else {
-        list.innerHTML = tags.map(tag => `
-            <div class="tag-list-item" onclick="addTagToSearch('${tag}')">
-                <div class="tag-list-item-left">
-                    <span class="tag-list-item-name">${tag}</span>
-                </div>
-                <div class="tag-list-item-right">
-                    <span class="tag-count-badge">${appState.tagFrequency[tag] || 0}</span>
-                </div>
+            <div class="tag-list-item-right">
+                <span class="tag-count-badge">${appState.freeTagFrequency[tag] || 0}</span>
             </div>
-        `).join('');
-    }
+        </div>
+    `).join('');
 }
 
-function addTagToSearch(tag) {
-    const lowerTag = tag.toLowerCase();
-    if (!appState.activeSearchTags.includes(lowerTag)) {
-        appState.activeSearchTags.push(lowerTag);
+function addFreeTagToSearch(tag) {
+    if (!appState.activeFreeTags.includes(tag)) {
+        appState.activeFreeTags.push(tag);
     }
     switchTab('search');
     applyFilters();
-}
-
-// ====== Tag Management ======
-function openRenameTagModal(tag) {
-    appState.currentTagToRename = tag;
-    const input = document.getElementById('renameTagInput');
-    if (input) {
-        input.value = tag;
-        input.focus();
-        input.select();
-    }
-    openModal('renameTagModal');
-}
-
-async function renameTag(oldTag, newTag) {
-    if (!newTag || newTag === oldTag) {
-        closeModal('renameTagModal');
-        return;
-    }
-
-    newTag = newTag.trim().replace(/\s+/g, ' ');
-    if (!newTag) {
-        showToast('태그명을 입력해주세요');
-        return;
-    }
-
-    // 새 태그가 이미 존재하면 병합
-    const isExisting = appState.allTags.includes(newTag);
-
-    // 모든 이미지의 태그 업데이트
-    appState.allImages.forEach(img => {
-        img.tags = img.tags.map(tag => tag === oldTag ? newTag : tag);
-        img.tags = [...new Set(img.tags)]; // 중복 제거
-    });
-
-    // 각 이미지 업데이트
-    for (const img of appState.allImages) {
-        await dbUpdateImage(img);
-    }
-
-    // 태그 목록 업데이트
-    if (!isExisting) {
-        appState.allTags = appState.allTags.filter(t => t !== oldTag);
-        appState.allTags.push(newTag);
-        appState.allTags.sort();
-    } else {
-        appState.allTags = appState.allTags.filter(t => t !== oldTag);
-    }
-    await dbSaveTags(appState.allTags);
-
-    // 빈도 업데이트
-    if (appState.tagFrequency[oldTag]) {
-        appState.tagFrequency[newTag] = appState.tagFrequency[oldTag];
-        delete appState.tagFrequency[oldTag];
-    }
-
-    closeModal('renameTagModal');
-    renderTagsList();
-    applyFilters();
-    renderSearchGrid();
-    renderTagPicker(document.getElementById('tagPickerSearch')?.value.toLowerCase() || '');
-    showToast('태그명 변경됨');
-}
-
-function openDeleteTagConfirm(tag) {
-    const count = appState.tagFrequency[tag] || 0;
-    appState.currentTagToDelete = tag;
-    
-    const text = `태그 '${tag}'를 삭제할까요?\n이 태그가 ${count}개 코디에 적용되어 있습니다.`;
-    showConfirm(text, deleteTag);
-}
-
-async function deleteTag() {
-    const tag = appState.currentTagToDelete;
-    if (!tag) return;
-
-    // 모든 이미지에서 태그 제거
-    appState.allImages.forEach(img => {
-        img.tags = img.tags.filter(t => t !== tag);
-    });
-
-    for (const img of appState.allImages) {
-        await dbUpdateImage(img);
-    }
-
-    // 태그 목록에서 제거
-    appState.allTags = appState.allTags.filter(t => t !== tag);
-    await dbSaveTags(appState.allTags);
-
-    // 빈도 제거
-    delete appState.tagFrequency[tag];
-
-    renderTagsList();
-    applyFilters();
-    renderSearchGrid();
-    showToast('태그 삭제됨');
-    closeModal('confirmModal');
 }
 
 // ====== Upload ======
@@ -785,7 +733,12 @@ async function handleFiles(files) {
                 id: Date.now() + i,
                 thumbnail: thumbnail,
                 original: dataURL,
-                tags: [],
+                structuredTags: {
+                    itemCategory: null,
+                    colors: [],
+                    shoeType: null
+                },
+                freeTags: [],
                 memo: '',
                 createdAt: new Date().toISOString()
             };
@@ -858,32 +811,91 @@ async function openEditModal(imageId) {
     document.getElementById('editPreviewImage').dataset.id = imageId;
     document.getElementById('editMemo').value = image.memo || '';
 
-    const tagContainer = document.getElementById('editSelectedTags');
-    if (tagContainer) {
-        tagContainer.innerHTML = image.tags.map(tag => `
-            <div class="tag-selected">
-                ${tag}
-                <span class="tag-remove" onclick="removeEditTag('${tag}')">✕</span>
-            </div>
-        `).join('');
-    }
+    renderEditStructuredTags(image.structuredTags);
+    renderEditFreeTags(image.freeTags);
 
     openModal('editModal');
 }
 
-function removeEditTag(tag) {
+function renderEditStructuredTags(structuredTags) {
+    const container = document.getElementById('editStructuredTags');
+    if (!container) return;
+
+    let html = '';
+
+    for (const [key, config] of Object.entries(STRUCTURED_TAGS_CONFIG)) {
+        const currentValue = structuredTags[key];
+        const label = config.label;
+        
+        if (key === 'colors') {
+            const selectedChips = config.values.map(value => `
+                <button class="edit-structured-chip ${currentValue.includes(value) ? 'selected' : ''}" 
+                        onclick="toggleStructuredTagInEdit('${key}', '${value}')">
+                    ${value}
+                </button>
+            `).join('');
+            html += `
+                <div class="edit-tag-category">
+                    <span class="edit-tag-label">${label}:</span>
+                    <div class="edit-tag-chips">${selectedChips}</div>
+                </div>
+            `;
+        } else {
+            const selectedChips = config.values.map(value => `
+                <button class="edit-structured-chip ${currentValue === value ? 'selected' : ''}" 
+                        onclick="setStructuredTagInEdit('${key}', '${value}')">
+                    ${value}
+                </button>
+            `).join('');
+            html += `
+                <div class="edit-tag-category">
+                    <span class="edit-tag-label">${label}:</span>
+                    <div class="edit-tag-chips">${selectedChips}</div>
+                </div>
+            `;
+        }
+    }
+
+    container.innerHTML = html;
+}
+
+function setStructuredTagInEdit(key, value) {
     const image = appState.allImages.find(img => img.id === appState.currentEditImageId);
     if (!image) return;
-    image.tags = image.tags.filter(t => t !== tag);
-    const tagContainer = document.getElementById('editSelectedTags');
-    if (tagContainer) {
-        tagContainer.innerHTML = image.tags.map(t => `
-            <div class="tag-selected">
-                ${t}
-                <span class="tag-remove" onclick="removeEditTag('${t}')">✕</span>
-            </div>
-        `).join('');
+    image.structuredTags[key] = image.structuredTags[key] === value ? null : value;
+    renderEditStructuredTags(image.structuredTags);
+}
+
+function toggleStructuredTagInEdit(key, value) {
+    const image = appState.allImages.find(img => img.id === appState.currentEditImageId);
+    if (!image) return;
+    
+    const index = image.structuredTags[key].indexOf(value);
+    if (index !== -1) {
+        image.structuredTags[key].splice(index, 1);
+    } else {
+        image.structuredTags[key].push(value);
     }
+    renderEditStructuredTags(image.structuredTags);
+}
+
+function renderEditFreeTags(freeTags) {
+    const container = document.getElementById('editFreeTags');
+    if (!container) return;
+
+    container.innerHTML = freeTags.map(tag => `
+        <div class="tag-selected">
+            ${tag}
+            <span class="tag-remove" onclick="removeFreeTagInEdit('${tag}')">✕</span>
+        </div>
+    `).join('');
+}
+
+function removeFreeTagInEdit(tag) {
+    const image = appState.allImages.find(img => img.id === appState.currentEditImageId);
+    if (!image) return;
+    image.freeTags = image.freeTags.filter(t => t !== tag);
+    renderEditFreeTags(image.freeTags);
 }
 
 async function saveImageEdit() {
@@ -926,23 +938,92 @@ function renderTagPicker(searchQuery) {
 
     let html = '';
 
-    const categories = {
-        스타일: ['꾸안꾸', '꾸꾸꾸'],
-        색상: ['흰색', '검정', '회색', '베이지', '브라운', '네이비', '블루', '그린', '올리브', '카키', '레드', '핑크'],
-        아이템: ['가디건', '원피스', '치마', '바지', '코트', '자켓', '니트', '스니커즈', '부츠', '로퍼', '샌들', '가방', '머플러']
-    };
+    if (appState.currentTagPickerTarget === 'search') {
+        // 1. Structured Tags Section
+        html += '<div class="tag-picker-section">';
+        html += '<div class="tag-picker-section-title">구조화 필터</div>';
 
-    for (const [category, tags] of Object.entries(categories)) {
-        const filtered = tags.filter(tag => !searchQuery || tag.toLowerCase().includes(searchQuery));
-        if (filtered.length > 0) {
+        for (const [key, config] of Object.entries(STRUCTURED_TAGS_CONFIG)) {
+            const label = config.label;
+            html += `<div class="structured-picker-category"><strong>${label}</strong></div>`;
+            html += '<div class="tag-picker-badges">';
+
+            config.values.forEach(value => {
+                let isSelected = false;
+                if (key === 'colors') {
+                    isSelected = appState.structuredFilters[key].includes(value);
+                } else {
+                    isSelected = appState.structuredFilters[key] === value;
+                }
+
+                html += `
+                    <button class="tag-badge ${isSelected ? 'selected' : ''}" 
+                            onclick="selectStructuredFilter('${key}', '${value}')">
+                        ${value}
+                    </button>
+                `;
+            });
+
+            html += '</div>';
+        }
+
+        html += '</div>';
+
+        // 2. Free Tags Section
+        html += '<div class="tag-picker-section">';
+        html += '<div class="tag-picker-section-title">자유 태그</div>';
+        html += '<div class="tag-picker-badges">';
+
+        appState.allFreeTags.filter(tag => !searchQuery || tag.toLowerCase().includes(searchQuery)).forEach(tag => {
+            html += `
+                <button class="tag-badge ${appState.activeFreeTags.includes(tag) ? 'selected' : ''}" 
+                        onclick="selectFreeTag('${tag}')">
+                    ${tag}
+                </button>
+            `;
+        });
+
+        html += '</div>';
+        html += '</div>';
+
+        // 3. New Free Tag Option
+        if (searchQuery && !appState.allFreeTags.includes(searchQuery)) {
             html += `
                 <div class="tag-picker-section">
-                    <div class="tag-picker-section-title">${category}</div>
-                    <div class="tag-picker-badges">
-                        ${filtered.map(tag => `
-                            <button class="tag-badge" onclick="selectTag('${tag}')">${tag}</button>
-                        `).join('')}
-                    </div>
+                    <button class="tag-badge-new" onclick="createNewFreeTag('${searchQuery}')">
+                        + '${searchQuery}' 태그 만들기
+                    </button>
+                </div>
+            `;
+        }
+    } else if (appState.currentTagPickerTarget === 'edit') {
+        // Edit mode: only free tags
+        html += '<div class="tag-picker-section">';
+        html += '<div class="tag-picker-section-title">자유 태그</div>';
+        html += '<div class="tag-picker-badges">';
+
+        appState.allFreeTags.filter(tag => !searchQuery || tag.toLowerCase().includes(searchQuery)).forEach(tag => {
+            const image = appState.allImages.find(img => img.id === appState.currentEditImageId);
+            const isSelected = image && image.freeTags.includes(tag);
+
+            html += `
+                <button class="tag-badge ${isSelected ? 'selected' : ''}" 
+                        onclick="selectFreeTagInEdit('${tag}')">
+                    ${tag}
+                </button>
+            `;
+        });
+
+        html += '</div>';
+        html += '</div>';
+
+        // New tag option
+        if (searchQuery && !appState.allFreeTags.includes(searchQuery)) {
+            html += `
+                <div class="tag-picker-section">
+                    <button class="tag-badge-new" onclick="createNewFreeTagInEdit('${searchQuery}')">
+                        + '${searchQuery}' 태그 만들기
+                    </button>
                 </div>
             `;
         }
@@ -951,46 +1032,73 @@ function renderTagPicker(searchQuery) {
     content.innerHTML = html;
 }
 
-function selectTag(tag) {
-    if (appState.currentTagPickerTarget === 'search') {
-        const lowerTag = tag.toLowerCase();
-        const index = appState.activeSearchTags.indexOf(lowerTag);
+function selectStructuredFilter(key, value) {
+    if (key === 'colors') {
+        const index = appState.structuredFilters[key].indexOf(value);
         if (index !== -1) {
-            appState.activeSearchTags.splice(index, 1);
+            appState.structuredFilters[key].splice(index, 1);
         } else {
-            appState.activeSearchTags.push(lowerTag);
+            appState.structuredFilters[key].push(value);
         }
-        applyFilters();
-        renderTagPicker(document.getElementById('tagPickerSearch')?.value.toLowerCase() || '');
-    } else if (appState.currentTagPickerTarget === 'edit') {
-        const image = appState.allImages.find(img => img.id === appState.currentEditImageId);
-        if (!image) return;
-
-        const index = image.tags.indexOf(tag);
-        if (index !== -1) {
-            image.tags.splice(index, 1);
-        } else {
-            image.tags.push(tag);
-        }
-
-        const tagContainer = document.getElementById('editSelectedTags');
-        if (tagContainer) {
-            tagContainer.innerHTML = image.tags.map(t => `
-                <div class="tag-selected">
-                    ${t}
-                    <span class="tag-remove" onclick="removeEditTag('${t}')">✕</span>
-                </div>
-            `).join('');
-        }
+    } else {
+        appState.structuredFilters[key] = appState.structuredFilters[key] === value ? null : value;
     }
+    applyFilters();
+    renderTagPicker(document.getElementById('tagPickerSearch')?.value.toLowerCase() || '');
+}
+
+function selectFreeTag(tag) {
+    const index = appState.activeFreeTags.indexOf(tag);
+    if (index !== -1) {
+        appState.activeFreeTags.splice(index, 1);
+    } else {
+        appState.activeFreeTags.push(tag);
+    }
+    applyFilters();
+    renderTagPicker(document.getElementById('tagPickerSearch')?.value.toLowerCase() || '');
+}
+
+function selectFreeTagInEdit(tag) {
+    const image = appState.allImages.find(img => img.id === appState.currentEditImageId);
+    if (!image) return;
+
+    const index = image.freeTags.indexOf(tag);
+    if (index !== -1) {
+        image.freeTags.splice(index, 1);
+    } else {
+        image.freeTags.push(tag);
+    }
+
+    renderEditFreeTags(image.freeTags);
+    renderTagPicker(document.getElementById('tagPickerSearch')?.value.toLowerCase() || '');
+}
+
+async function createNewFreeTag(tag) {
+    const trimmed = tag.trim();
+    if (!appState.allFreeTags.includes(trimmed)) {
+        appState.allFreeTags.push(trimmed);
+        appState.allFreeTags.sort();
+        await dbSaveFreeTags(appState.allFreeTags);
+    }
+    selectFreeTag(trimmed);
+}
+
+async function createNewFreeTagInEdit(tag) {
+    const trimmed = tag.trim();
+    if (!appState.allFreeTags.includes(trimmed)) {
+        appState.allFreeTags.push(trimmed);
+        appState.allFreeTags.sort();
+        await dbSaveFreeTags(appState.allFreeTags);
+    }
+    selectFreeTagInEdit(trimmed);
 }
 
 // ====== Settings ======
 function exportData() {
     const data = {
-        version: 1,
+        version: 2,
         images: appState.allImages,
-        tags: appState.allTags
+        freeTags: appState.allFreeTags
     };
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
@@ -1016,12 +1124,13 @@ function importData(e) {
             if (!merge) {
                 await dbClearAll();
                 appState.allImages = [];
+                appState.allFreeTags = [];
             }
 
             appState.allImages = [...appState.allImages, ...data.images];
-            appState.allTags = [...new Set([...appState.allTags, ...data.tags])];
+            appState.allFreeTags = [...new Set([...appState.allFreeTags, ...(data.freeTags || [])])];
 
-            await dbSaveTags(appState.allTags);
+            await dbSaveFreeTags(appState.allFreeTags);
             for (const image of data.images) {
                 await dbSaveImage(image);
             }
@@ -1041,7 +1150,7 @@ function importData(e) {
 async function resetAll() {
     await dbClearAll();
     appState.allImages = [];
-    appState.allTags = [];
+    appState.allFreeTags = [];
     localStorage.clear();
     location.reload();
 }
@@ -1083,5 +1192,5 @@ function updateInfoDisplay() {
     const tagCount = document.getElementById('tagCountInfo');
 
     if (imageCount) imageCount.textContent = appState.allImages.length;
-    if (tagCount) tagCount.textContent = appState.allTags.length;
+    if (tagCount) tagCount.textContent = appState.allFreeTags.length;
 }

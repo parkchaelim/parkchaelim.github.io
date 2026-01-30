@@ -1242,3 +1242,73 @@ html, body {
 .hidden {
     display: none !important;
 }
+
+/* Structured Filters */
+.structured-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.structured-filter-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* Edit Modal - Structured Tags */
+.edit-tag-category {
+    margin-bottom: 16px;
+}
+
+.edit-tag-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: block;
+    margin-bottom: 8px;
+}
+
+.edit-tag-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.edit-structured-chip {
+    padding: 8px 12px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.edit-structured-chip:active {
+    background-color: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.edit-structured-chip.selected {
+    background-color: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+/* Tag Picker - Structured Categories */
+.structured-picker-category {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-top: 12px;
+    margin-bottom: 8px;
+    padding-left: 4px;
+}
+
+.structured-picker-category:first-of-type {
+    margin-top: 0;
+}
