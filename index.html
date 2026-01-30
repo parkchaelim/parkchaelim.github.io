@@ -10,12 +10,7 @@
     <div class="app">
         <!-- Header -->
         <header class="header">
-            <h1>👗 채림's 옷장</h1>
-            <div class="header-actions">
-                <button id="exportBtn" class="btn-icon" aria-label="데이터 내보내기">⬇️</button>
-                <button id="importBtn" class="btn-icon" aria-label="데이터 가져오기">⬆️</button>
-                <input type="file" id="importFile" accept=".json" style="display: none;">
-            </div>
+            <h1>👗  채림's 옷장</h1>
         </header>
 
         <!-- Tab Navigation -->
@@ -43,6 +38,13 @@
                 <input type="file" id="quickFileInput" accept="image/*" multiple style="display: none;">
             </div>
 
+            <!-- Grid Layout Selector -->
+            <div class="grid-selector">
+                <button class="grid-btn" data-cols="2">2</button>
+                <button class="grid-btn active" data-cols="3">3</button>
+                <button class="grid-btn" data-cols="4">4</button>
+            </div>
+
             <!-- Recent Tags -->
             <div id="recentTagsSection" class="recent-tags-section">
                 <div id="recentTags" class="recent-tags"></div>
@@ -58,9 +60,9 @@
                 </div>
             </div>
 
-            <!-- Gallery Grid (2열) -->
+            <!-- Gallery Grid -->
             <section class="gallery-section">
-                <div id="galleryGrid" class="gallery-grid-2col"></div>
+                <div id="galleryGrid" class="gallery-grid gallery-grid-3col"></div>
                 <div id="emptyState" class="empty-state">
                     <p>아직 비어 있어요</p>
                     <p class="small">캡처한 코디를 바로 저장해보세요</p>
@@ -113,7 +115,7 @@
 
                 <!-- Search Results -->
                 <div id="searchResults" class="gallery-section">
-                    <div id="searchResultGrid" class="gallery-grid-2col"></div>
+                    <div id="searchResultGrid" class="gallery-grid gallery-grid-3col"></div>
                     <div id="emptySearchState" class="empty-state" style="display: none;">
                         <p>검색 결과가 없어요</p>
                         <p class="small">다른 태그를 시도해보세요</p>
