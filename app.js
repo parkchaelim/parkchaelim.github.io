@@ -14,16 +14,34 @@ const appState = {
     isSelectMode: false,
     currentEditImageId: null,
     currentTagPickerTarget: null,
+    useLocalStorage: false,
 };
 
 // ====== Initialization ======
 document.addEventListener('DOMContentLoaded', async () => {
+    initializeViewportHeight();
     await initDB();
     await loadAllData();
     setupEventListeners();
     setupTabNavigation();
     switchTab('search');
 });
+
+// ====== Viewport Height Management ======
+function initializeViewportHeight() {
+    function updateHeight() {
+        const height = window.visualViewport?.height || window.innerHeight;
+        document.documentElement.style.setProperty('--app-height', height + 'px');
+    }
+
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+    window.addEventListener('orientationchange', updateHeight);
+    
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateHeight);
+    }
+}
 
 async function initDB() {
     return new Promise((resolve) => {
@@ -65,7 +83,6 @@ async function loadAllData() {
         await dbSaveTags(appState.allTags);
     }
 
-    // Calculate tag frequency
     appState.tagFrequency = {};
     appState.allImages.forEach(img => {
         img.tags.forEach(tag => {
@@ -212,6 +229,96 @@ function dbClearAll() {
 
 // ====== Event Listeners ======
 function setupEventListeners() {
+    // Archive - Select Mode
+    const archiveTab = document.getElementById('archiveTab');
+    archiveTab.addEventListener('click', (e) => {
+        const card = e.target.closest('.image-card');
+        if (!card) return;
+
+        if (appState.isSelectMode) {
+            const imageId = parseInt(card.dataset.id);
+            if (appState.selectedImageIds.has(imageId)) {
+                appState.selectedImageIds.delete(imageId);
+            } else {
+                appState.selectedImageIds.add(imageId);
+            }
+            updateSelectionUI();
+            renderArchiveGrid();
+        } else {
+            const imageId = parseInt(card.dataset.id);
+            openEditModal(imageId);
+        }
+    });
+
+    // Long press for select mode
+    let longPressTimer;
+    archiveTab.addEventListener('touchstart', (e) => {
+        const card = e.target.closest('.image-card');
+        if (!card || appState.isSelectMode) return;
+
+        longPressTimer = setTimeout(() => {
+            appState.isSelectMode = true;
+            const imageId = parseInt(card.dataset.id);
+            appState.selectedImageIds.add(imageId);
+            updateSelectionUI();
+            updateSelectModeBar();
+            renderArchiveGrid();
+        }, 500);
+    });
+
+    archiveTab.addEventListener('touchend', () => {
+        clearTimeout(longPressTimer);
+    });
+
+    archiveTab.addEventListener('touchmove', () => {
+        clearTimeout(longPressTimer);
+    });
+
+    // Select Mode Buttons (Archive)
+    document.getElementById('selectAllBtn').addEventListener('click', () => {
+        document.querySelectorAll('#archiveGrid .image-card').forEach(card => {
+            appState.selectedImageIds.add(parseInt(card.dataset.id));
+        });
+        updateSelectionUI();
+        renderArchiveGrid();
+    });
+
+    document.getElementById('deselectAllBtn').addEventListener('click', () => {
+        appState.selectedImageIds.clear();
+        updateSelectionUI();
+        renderArchiveGrid();
+    });
+
+    document.getElementById('selectDoneBtn').addEventListener('click', () => {
+        appState.isSelectMode = false;
+        appState.selectedImageIds.clear();
+        updateSelectionUI();
+        updateSelectModeBar();
+        renderArchiveGrid();
+    });
+
+    // Multi-Action Bar
+    document.getElementById('addTagsSelectedBtn').addEventListener('click', () => {
+        if (appState.selectedImageIds.size === 0) return;
+        appState.currentTagPickerTarget = 'addTags';
+        openTagPicker();
+    });
+
+    document.getElementById('removeTagsSelectedBtn').addEventListener('click', () => {
+        if (appState.selectedImageIds.size === 0) return;
+        appState.currentTagPickerTarget = 'removeTags';
+        openTagPicker();
+    });
+
+    document.getElementById('deleteSelectedBtn').addEventListener('click', () => {
+        if (appState.selectedImageIds.size === 0) return;
+        const count = appState.selectedImageIds.size;
+        showConfirm(
+            `선택한 ${count}개 코디를 삭제할까요?\n되돌릴 수 없습니다.`,
+            deleteSelectedImages
+        );
+    });
+
     // Search
     const searchInput = document.getElementById('searchInput');
     const searchClearBtn = document.getElementById('searchClearBtn');
@@ -251,29 +358,9 @@ function setupEventListeners() {
         openTagPicker();
     });
 
-    // Archive
+    // Archive - Add Image
     document.getElementById('addImageBtn').addEventListener('click', () => {
         openModal('addImageModal');
-    });
-
-    document.getElementById('selectModeBtn').addEventListener('click', () => {
-        appState.isSelectMode = !appState.isSelectMode;
-        document.getElementById('selectModeBtn').textContent = appState.isSelectMode ? '완료' : '선택';
-        renderArchiveGrid();
-    });
-
-    document.getElementById('selectAllBtn').addEventListener('click', () => {
-        document.querySelectorAll('#archiveGrid .image-card').forEach(card => {
-            appState.selectedImageIds.add(parseInt(card.dataset.id));
-        });
-        renderArchiveGrid();
-        updateMultiSelectBar();
-    });
-
-    document.getElementById('deselectAllBtn').addEventListener('click', () => {
-        appState.selectedImageIds.clear();
-        renderArchiveGrid();
-        updateMultiSelectBar();
     });
 
     // Upload
@@ -325,7 +412,7 @@ function setupEventListeners() {
 
     document.getElementById('importFile').addEventListener('change', importData);
     document.getElementById('resetBtn').addEventListener('click', () => {
-        showConfirm('모든 데이터가 삭제됩니다. 계속하시겠습니까?', resetAll);
+        showConfirm('모든 데이터가 삭제됩니다.\n계속하시겠습니까?', resetAll);
     });
 
     document.getElementById('imageDisplayToggle').addEventListener('change', (e) => {
@@ -337,7 +424,7 @@ function setupEventListeners() {
         localStorage.setItem('imageDisplayMode', contain ? 'contain' : 'cover');
     });
 
-    // Modal Actions
+    // Edit Modal
     document.getElementById('editTagPickerBtn').addEventListener('click', () => {
         appState.currentTagPickerTarget = 'edit';
         openTagPicker();
@@ -346,7 +433,7 @@ function setupEventListeners() {
     document.getElementById('editSaveBtn').addEventListener('click', saveImageEdit);
     document.getElementById('editDeleteBtn').addEventListener('click', () => {
         const imageId = parseInt(document.getElementById('editPreviewImage').dataset.id);
-        showConfirm('이미지를 삭제하시겠습니까?', async () => {
+        showConfirm('이미지를 삭제하시겠습니까?\n되돌릴 수 없습니다.', async () => {
             await dbDeleteImage(imageId);
             appState.allImages = appState.allImages.filter(img => img.id !== imageId);
             closeModal('editModal');
@@ -356,22 +443,8 @@ function setupEventListeners() {
         });
     });
 
-    document.getElementById('addTagsToSelectedBtn').addEventListener('click', () => {
-        appState.currentTagPickerTarget = 'addTags';
-        openTagPicker();
-    });
-
-    document.getElementById('removeTagsFromSelectedBtn').addEventListener('click', () => {
-        appState.currentTagPickerTarget = 'removeTags';
-        openTagPicker();
-    });
-
-    document.getElementById('deleteSelectedBtn').addEventListener('click', () => {
-        if (appState.selectedImageIds.size === 0) return;
-        showConfirm(`${appState.selectedImageIds.size}개 이미지를 삭제하시겠습니까?`, deleteSelectedImages);
-    });
-
-    document.getElementById('confirmOkBtn').addEventListener('click', () => {
+    // Confirm Modal
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => {
         closeModal('confirmModal');
     });
 
@@ -380,7 +453,7 @@ function setupEventListeners() {
     document.getElementById('viewerDeleteBtn').addEventListener('click', () => {
         const imageId = appState.filteredImages[appState.currentImageIndex]?.id;
         if (!imageId) return;
-        showConfirm('이미지를 삭제하시겠습니까?', async () => {
+        showConfirm('이미지를 삭제하시겠습니까?\n되돌릴 수 없습니다.', async () => {
             await dbDeleteImage(imageId);
             appState.allImages = appState.allImages.filter(img => img.id !== imageId);
             closeViewer();
@@ -392,7 +465,7 @@ function setupEventListeners() {
 
     document.getElementById('viewerEditBtn').addEventListener('click', openEditFromViewer);
 
-    // Viewer Canvas Swipe
+    // Viewer Swipe
     let touchStartX = 0;
     const viewerCanvas = document.getElementById('viewerCanvas');
     viewerCanvas.addEventListener('touchstart', (e) => {
@@ -407,7 +480,7 @@ function setupEventListeners() {
         }
     });
 
-    // Tap Picker
+    // Tag Picker Search
     document.getElementById('tagPickerSearch').addEventListener('input', (e) => {
         renderTagPicker(e.target.value.toLowerCase());
     });
@@ -442,13 +515,43 @@ function switchTab(tabName) {
     };
     document.getElementById('headerTitle').textContent = titles[tabName];
 
-    if (tabName === 'search') {
-        renderSearchGrid();
-    } else if (tabName === 'archive') {
+    if (tabName === 'archive') {
+        updateSelectModeBar();
         renderArchiveGrid();
     } else if (tabName === 'tags') {
         renderTagsList('frequency');
     }
+}
+
+// ====== Select Mode ======
+function updateSelectionUI() {
+    const count = appState.selectedImageIds.size;
+    document.getElementById('selectionCount').textContent = `${count}개 선택`;
+
+    // Update delete button disabled state
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    deleteBtn.disabled = count === 0;
+}
+
+function updateSelectModeBar() {
+    const selectModeBtn = document.getElementById('selectModeBtn');
+    const selectModeBar = document.getElementById('selectModeBar');
+    const multiActionBar = document.getElementById('multiActionBar');
+    const mainContent = document.querySelector('.main-content');
+
+    if (appState.isSelectMode && document.getElementById('archiveTab').classList.contains('active')) {
+        selectModeBtn.style.display = 'none';
+        selectModeBar.style.display = 'flex';
+        multiActionBar.style.display = 'flex';
+        document.documentElement.style.setProperty('--actionbar-height', '50px');
+    } else {
+        selectModeBtn.style.display = appState.currentTab === 'archive' ? 'block' : 'none';
+        selectModeBar.style.display = 'none';
+        multiActionBar.style.display = 'none';
+        document.documentElement.style.setProperty('--actionbar-height', '0px');
+    }
+
+    updateSelectionUI();
 }
 
 // ====== Search Tab ======
@@ -457,7 +560,6 @@ function applyFilters() {
     const searchTerms = searchText.split(/\s+/).filter(t => t);
 
     let filtered = appState.allImages.filter(img => {
-        // Text search
         if (searchTerms.length > 0) {
             const hasAllTerms = searchTerms.every(term =>
                 img.tags.some(tag => tag.toLowerCase().includes(term)) ||
@@ -466,7 +568,6 @@ function applyFilters() {
             if (!hasAllTerms) return false;
         }
 
-        // Tag filtering
         if (appState.activeSearchTags.length > 0) {
             const imageTags = img.tags.map(t => t.toLowerCase());
             if (appState.filterMode === 'and') {
@@ -479,7 +580,6 @@ function applyFilters() {
         return true;
     });
 
-    // Sort
     filtered.sort((a, b) => {
         const timeA = new Date(a.createdAt).getTime();
         const timeB = new Date(b.createdAt).getTime();
@@ -549,37 +649,10 @@ function renderArchiveGrid() {
     const objectFit = localStorage.getItem('imageDisplayMode') || 'contain';
     grid.innerHTML = sorted.map(img => `
         <div class="image-card ${appState.selectedImageIds.has(img.id) ? 'selected' : ''}" 
-             data-id="${img.id}" 
-             onclick="handleArchiveCardClick(event, ${img.id})">
+             data-id="${img.id}">
             <img src="${img.thumbnail}" alt="image" style="object-fit: ${objectFit};">
         </div>
     `).join('');
-}
-
-function handleArchiveCardClick(event, imageId) {
-    if (appState.isSelectMode) {
-        if (appState.selectedImageIds.has(imageId)) {
-            appState.selectedImageIds.delete(imageId);
-        } else {
-            appState.selectedImageIds.add(imageId);
-        }
-        updateMultiSelectBar();
-        renderArchiveGrid();
-    } else {
-        openEditModal(imageId);
-    }
-}
-
-function updateMultiSelectBar() {
-    const bar = document.getElementById('multiSelectBar');
-    const count = document.getElementById('selectionCount');
-
-    if (appState.isSelectMode && appState.selectedImageIds.size > 0) {
-        bar.style.display = 'flex';
-        count.textContent = `${appState.selectedImageIds.size}개 선택`;
-    } else {
-        bar.style.display = 'none';
-    }
 }
 
 // ====== Tags Tab ======
@@ -651,7 +724,7 @@ async function handleFiles(files) {
     updateInfoDisplay();
     renderArchiveGrid();
     applyFilters();
-    showToast('저장되었습니다');
+    showToast(`${imageFiles.length}개 저장되었습니다`);
 
     if (!quickAdd && appState.allImages.length > 0) {
         setTimeout(() => {
@@ -706,12 +779,10 @@ function openViewer(index) {
     appState.currentImageIndex = index;
     showViewerImage();
     document.getElementById('imageViewer').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
 }
 
 function closeViewer() {
     document.getElementById('imageViewer').style.display = 'none';
-    document.body.style.overflow = '';
 }
 
 function showViewerImage() {
@@ -943,17 +1014,17 @@ async function createNewTag(tag) {
 
 // ====== Multi-select Actions ======
 async function deleteSelectedImages() {
+    const count = appState.selectedImageIds.size;
     for (const id of appState.selectedImageIds) {
         await dbDeleteImage(id);
     }
     appState.allImages = appState.allImages.filter(img => !appState.selectedImageIds.has(img.id));
     appState.selectedImageIds.clear();
     appState.isSelectMode = false;
-    document.getElementById('selectModeBtn').textContent = '선택';
-    updateMultiSelectBar();
+    updateSelectModeBar();
     renderArchiveGrid();
     applyFilters();
-    showToast('삭제되었습니다');
+    showToast(`${count}개 삭제됨`);
 }
 
 // ====== Settings ======
