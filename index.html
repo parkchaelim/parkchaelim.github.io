@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Outfit Archive</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -10,224 +10,320 @@
     <div class="app">
         <!-- Header -->
         <header class="header">
-            <h1>👗  채림's 옷장</h1>
+            <div class="header-left">
+                <h1 class="header-title" id="headerTitle">검색</h1>
+            </div>
+            <div class="header-right">
+                <button class="header-btn" id="headerActionBtn" aria-label="액션">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="1"></circle>
+                        <circle cx="19" cy="12" r="1"></circle>
+                        <circle cx="5" cy="12" r="1"></circle>
+                    </svg>
+                </button>
+            </div>
         </header>
 
-        <!-- Tab Navigation -->
-        <div class="tab-navigation">
-            <button id="storageTab" class="tab-button active" aria-label="보관함">보관함</button>
-            <button id="filterTab" class="tab-button" aria-label="필터">필터</button>
-        </div>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Search Tab -->
+            <div class="tab-content active" id="searchTab">
+                <div class="search-section">
+                    <div class="search-bar">
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            class="search-input"
+                            placeholder="예) 올리브 가디건"
+                            autocomplete="off"
+                        >
+                        <button class="search-clear-btn" id="searchClearBtn" style="display: none;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
 
-        <!-- Storage Tab (보관함) -->
-        <div id="storageTabContent" class="tab-content active">
-            <!-- Search State Bar -->
-            <div id="searchStateBar" class="search-state-bar">
-                <input 
-                    type="text" 
-                    id="searchTrigger" 
-                    placeholder="🔍 검색"
-                    class="search-trigger"
-                    readonly
-                >
-            </div>
-
-            <!-- Quick Add Button -->
-            <div class="quick-action-bar">
-                <button id="quickAddBtn" class="btn-quick-add">+ 추가</button>
-                <input type="file" id="quickFileInput" accept="image/*" multiple style="display: none;">
-            </div>
-
-            <!-- Grid Layout Selector -->
-            <div class="grid-selector">
-                <button class="grid-btn" data-cols="2">2</button>
-                <button class="grid-btn active" data-cols="3">3</button>
-                <button class="grid-btn" data-cols="4">4</button>
-            </div>
-
-            <!-- Recent Tags -->
-            <div id="recentTagsSection" class="recent-tags-section">
-                <div id="recentTags" class="recent-tags"></div>
-            </div>
-
-            <!-- Selection Mode Bar -->
-            <div id="selectionBar" class="selection-bar" style="display: none;">
-                <span id="selectionCount">0개 선택</span>
-                <div class="selection-actions">
-                    <button id="selectAllBtn" class="btn btn-sm">전체</button>
-                    <button id="deselectAllBtn" class="btn btn-sm">해제</button>
-                    <button id="deleteSelectedBtn" class="btn btn-sm btn-danger">삭제</button>
-                </div>
-            </div>
-
-            <!-- Gallery Grid -->
-            <section class="gallery-section">
-                <div id="galleryGrid" class="gallery-grid gallery-grid-3col"></div>
-                <div id="emptyState" class="empty-state">
-                    <p>아직 비어 있어요</p>
-                    <p class="small">캡처한 코디를 바로 저장해보세요</p>
-                </div>
-            </section>
-        </div>
-
-        <!-- Filter Tab (필터) -->
-        <div id="filterTabContent" class="tab-content">
-            <!-- Full Screen Search Mode -->
-            <div class="search-fullscreen">
-                <div class="search-header">
-                    <input 
-                        type="text" 
-                        id="searchInput" 
-                        placeholder="태그 검색..."
-                        class="search-input-full"
-                        autocomplete="off"
-                    >
-                    <button id="searchClose" class="btn-close">✕</button>
-                </div>
-
-                <!-- Active Filter Tags -->
-                <div id="activeFilters" class="active-filters"></div>
-
-                <!-- Tag Categories -->
-                <div class="tag-categories">
-                    <button class="category-tab active" data-category="recent">최근</button>
-                    <button class="category-tab" data-category="color">색상</button>
-                    <button class="category-tab" data-category="item">아이템</button>
-                    <button class="category-tab" data-category="style">스타일</button>
-                </div>
-
-                <!-- Tag List -->
-                <div id="tagList" class="tag-list"></div>
-
-                <!-- Filter Controls -->
-                <div class="filter-controls">
-                    <button id="toggleFilterMode" class="toggle-btn">
-                        <span id="filterModeText">모두 포함</span>
+                    <!-- Search Options (Collapsible) -->
+                    <button class="search-options-toggle" id="searchOptionsToggle">
+                        <span>필터</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
                     </button>
-                    <select id="sortBy" class="select-sort">
-                        <option value="newest">최신순</option>
-                        <option value="oldest">오래된순</option>
-                    </select>
+
+                    <div class="search-options" id="searchOptions" style="display: none;">
+                        <button class="filter-mode-toggle" id="filterModeToggle">
+                            <span id="filterModeLabel">모두 포함</span>
+                        </button>
+                        <select id="sortBy" class="sort-select">
+                            <option value="newest">최신순</option>
+                            <option value="oldest">오래된순</option>
+                        </select>
+                    </div>
+
+                    <!-- Active Filters -->
+                    <div id="activeFilters" class="active-filters"></div>
                 </div>
 
-                <!-- Result Info -->
-                <div id="resultInfo" class="result-info"></div>
+                <!-- Tag Explorer -->
+                <div class="tag-explorer">
+                    <!-- Category Tabs -->
+                    <div class="tag-categories">
+                        <button class="tag-category-btn active" data-category="recent">
+                            최근
+                        </button>
+                        <button class="tag-category-btn" data-category="popular">
+                            인기
+                        </button>
+                        <button class="tag-category-btn" data-category="color">
+                            색상
+                        </button>
+                        <button class="tag-category-btn" data-category="item">
+                            아이템
+                        </button>
+                        <button class="tag-category-btn" data-category="style">
+                            스타일
+                        </button>
+                    </div>
+
+                    <!-- Tag Chips -->
+                    <div class="tag-chips" id="tagChips"></div>
+                </div>
 
                 <!-- Search Results -->
-                <div id="searchResults" class="gallery-section">
-                    <div id="searchResultGrid" class="gallery-grid gallery-grid-3col"></div>
-                    <div id="emptySearchState" class="empty-state" style="display: none;">
-                        <p>검색 결과가 없어요</p>
-                        <p class="small">다른 태그를 시도해보세요</p>
+                <div class="results-section">
+                    <div class="results-info" id="resultsInfo"></div>
+                    <div class="grid-container" id="searchResultsGrid"></div>
+                    <div class="empty-state" id="searchEmptyState" style="display: none;">
+                        <p class="empty-title">검색 결과가 없어요</p>
+                        <p class="empty-subtitle">다른 태그를 시도해보세요</p>
+                        <button class="btn btn-secondary" id="clearFiltersBtn">필터 초기화</button>
                     </div>
                 </div>
             </div>
-        </div>
+
+            <!-- Archive Tab -->
+            <div class="tab-content" id="archiveTab">
+                <div class="archive-toolbar">
+                    <button class="btn btn-sm" id="selectModeBtn">선택</button>
+                    <button class="btn btn-sm" id="addImageBtn">+ 추가</button>
+                </div>
+
+                <div class="multi-select-bar" id="multiSelectBar" style="display: none;">
+                    <span id="selectionCount">0개 선택</span>
+                    <button class="btn btn-sm" id="selectAllBtn">전체</button>
+                    <button class="btn btn-sm" id="deselectAllBtn">해제</button>
+                </div>
+
+                <div class="grid-container" id="archiveGrid"></div>
+                <div class="empty-state" id="archiveEmptyState" style="display: none;">
+                    <p class="empty-title">이미지가 없어요</p>
+                    <p class="empty-subtitle">+ 추가 버튼으로 시작해보세요</p>
+                </div>
+            </div>
+
+            <!-- Tags Tab -->
+            <div class="tab-content" id="tagsTab">
+                <div class="tags-toolbar">
+                    <select id="tagsSortBy" class="sort-select">
+                        <option value="frequency">빈도순</option>
+                        <option value="alphabetic">가나다순</option>
+                    </select>
+                </div>
+                <div class="tags-list" id="tagsList"></div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div class="tab-content" id="settingsTab">
+                <div class="settings-section">
+                    <h3 class="settings-title">데이터</h3>
+                    <button class="settings-btn" id="exportBtn">내보내기</button>
+                    <button class="settings-btn" id="importBtn">가져오기</button>
+                    <input type="file" id="importFile" accept=".json" style="display: none;">
+                </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-title">정보</h3>
+                    <div class="info-item">
+                        <span>저장된 이미지</span>
+                        <span id="imageCountInfo">0개</span>
+                    </div>
+                    <div class="info-item">
+                        <span>태그 개수</span>
+                        <span id="tagCountInfo">0개</span>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-title">위험 영역</h3>
+                    <button class="settings-btn btn-danger" id="resetBtn">모두 초기화</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Tab Bar -->
+        <nav class="bottom-tab-bar">
+            <button class="tab-btn active" data-tab="search">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <span>검색</span>
+            </button>
+            <button class="tab-btn" data-tab="archive">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 3 2 3 2 5 22 5"></polyline>
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                </svg>
+                <span>보관함</span>
+            </button>
+            <button class="tab-btn" data-tab="tags">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"></path>
+                </svg>
+                <span>태그</span>
+            </button>
+            <button class="tab-btn" data-tab="settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m3.08 3.08l4.24 4.24M1 12h6m6 0h6m-16.78 7.78l4.24-4.24m3.08-3.08l4.24-4.24"></path>
+                </svg>
+                <span>설정</span>
+            </button>
+        </nav>
     </div>
 
-    <!-- Upload Modal (태그 없이 빠르게 저장) -->
-    <div id="uploadModal" class="modal" style="display: none;">
-        <div class="modal-content modal-sm">
+    <!-- Modals -->
+    <!-- Add Image Modal -->
+    <div class="modal" id="addImageModal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>이미지 추가</h2>
-                <button class="modal-close" aria-label="닫기">✕</button>
+                <button class="modal-close" id="addImageCloseBtn">✕</button>
             </div>
             <div class="modal-body">
-                <div id="uploadArea" class="upload-area">
-                    <p>📁 이미지를 여기에 드래그하거나 클릭</p>
-                    <p class="small">또는 Ctrl/⌘+V로 붙여넣기</p>
+                <div class="upload-area" id="uploadArea">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <p class="upload-text">이미지를 드래그하거나 클릭</p>
+                    <p class="upload-subtext">또는 Ctrl+V로 붙여넣기</p>
                 </div>
+                <input type="file" id="imageInput" accept="image/*" multiple style="display: none;">
+
+                <div class="quick-save-option">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="quickSaveCheckbox" checked>
+                        <span>태그 없이 빠르게 저장</span>
+                    </label>
+                </div>
+
+                <button class="btn btn-primary" id="uploadConfirmBtn" style="display: none;">
+                    저장
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Image Detail & Edit Modal -->
-    <div id="editModal" class="modal" style="display: none;">
+    <!-- Image Detail Modal -->
+    <div class="modal" id="imageDetailModal" style="display: none;">
+        <div class="modal-overlay"></div>
         <div class="modal-content modal-fullscreen">
             <div class="modal-header">
-                <button class="btn-back" aria-label="뒤로">‹</button>
-                <h2>태그 추가</h2>
-                <button class="modal-close" aria-label="닫기">✕</button>
-            </div>
-            <div class="modal-body edit-modal-body">
-                <div class="edit-image-section">
-                    <img id="editImage" src="" alt="이미지">
-                </div>
-
-                <!-- Tag Quick Bar -->
-                <div class="tag-quick-bar">
-                    <button class="quick-category active" data-category="recent">최근</button>
-                    <button class="quick-category" data-category="color">색상</button>
-                    <button class="quick-category" data-category="item">아이템</button>
-                    <button class="quick-category" data-category="style">스타일</button>
-                </div>
-
-                <!-- Quick Tag Chips -->
-                <div id="quickTagChips" class="quick-tag-chips"></div>
-
-                <!-- Manual Tag Input -->
-                <div class="tag-input-wrapper">
-                    <input 
-                        type="text" 
-                        id="editTagInput" 
-                        placeholder="태그 입력 (Enter)"
-                        class="tag-input"
-                        autocomplete="off"
-                    >
-                    <div id="editTagSuggestions" class="tag-suggestions"></div>
-                </div>
-
-                <!-- Selected Tags -->
-                <div id="editTagList" class="tag-list-selected"></div>
-
-                <!-- Memo -->
-                <div class="form-group">
-                    <h3>메모</h3>
-                    <textarea 
-                        id="editMemo" 
-                        placeholder="메모 추가..."
-                        class="textarea"
-                    ></textarea>
-                </div>
-
-                <!-- Actions -->
-                <div class="form-actions">
-                    <button id="editSaveBtn" class="btn btn-primary btn-lg">저장</button>
-                    <button id="editCancelBtn" class="btn btn-secondary btn-lg">취소</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Action Sheet -->
-    <div id="deleteActionSheet" class="action-sheet" style="display: none;">
-        <div class="action-sheet-content">
-            <button id="deleteConfirmBtn" class="action-btn btn-danger">
-                삭제
-            </button>
-            <button id="deleteCancel" class="action-btn">
-                취소
-            </button>
-        </div>
-    </div>
-
-    <!-- Bulk Upload Progress Modal -->
-    <div id="uploadProgressModal" class="modal" style="display: none;">
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h2>업로드 중</h2>
+                <button class="modal-close" id="detailCloseBtn">‹</button>
+                <h2>상세</h2>
+                <button class="modal-action" id="detailDeleteBtn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
             </div>
             <div class="modal-body">
-                <div class="progress-bar">
-                    <div id="progressFill" class="progress-fill"></div>
+                <div class="detail-image-container">
+                    <img id="detailImage" src="" alt="이미지">
                 </div>
-                <p id="progressText" class="progress-text">0 / 0</p>
+
+                <div class="detail-form">
+                    <!-- Tags Section -->
+                    <div class="form-section">
+                        <h3>태그</h3>
+                        <div class="tag-input-wrapper">
+                            <input 
+                                type="text" 
+                                id="detailTagInput" 
+                                class="tag-input"
+                                placeholder="태그 입력 (Enter)"
+                                autocomplete="off"
+                            >
+                            <div class="tag-autocomplete" id="tagAutocomplete" style="display: none;"></div>
+                        </div>
+                        <div class="tag-chips-selected" id="detailTagChips"></div>
+                    </div>
+
+                    <!-- Memo Section -->
+                    <div class="form-section">
+                        <h3>메모</h3>
+                        <textarea 
+                            id="detailMemo" 
+                            class="memo-input"
+                            placeholder="메모를 입력하세요"
+                        ></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" id="detailSaveBtn">저장</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Toast Notification -->
-    <div id="toast" class="toast"></div>
+    <!-- Multi-select Actions Modal -->
+    <div class="modal" id="multiSelectActionsModal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>선택 항목</h2>
+                <button class="modal-close" id="multiSelectCloseBtn">✕</button>
+            </div>
+            <div class="modal-body">
+                <button class="btn btn-block" id="addTagsBtn">태그 추가</button>
+                <button class="btn btn-block" id="removeTagsBtn">태그 제거</button>
+                <button class="btn btn-block btn-danger" id="deleteSelectedBtn">삭제</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal" id="confirmModal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-body">
+                <p id="confirmText"></p>
+                <div class="confirm-actions">
+                    <button class="btn btn-secondary" id="confirmCancelBtn">취소</button>
+                    <button class="btn btn-danger" id="confirmOkBtn">확인</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Upload Progress -->
+    <div class="progress-overlay" id="progressOverlay" style="display: none;">
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p id="progressText">0 / 0</p>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>
