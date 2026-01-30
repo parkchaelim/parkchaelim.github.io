@@ -739,6 +739,61 @@ class UIManager {
         }
     }
 
+    renderGallery() {
+        const grid = document.getElementById('galleryGrid');
+        const emptyState = document.getElementById('emptyState');
+
+        if (this.currentImages.length === 0) {
+            grid.innerHTML = '';
+            emptyState.style.display = 'block';
+            return;
+        }
+
+        if (this.filteredImages.length === 0) {
+            grid.innerHTML = '';
+            emptyState.innerHTML = '<p>검색 결과가 없습니다.</p><p class="small">다른 검색어를 시도해보세요.</p>';
+            emptyState.style.display = 'block';
+            return;
+        }
+
+        emptyState.style.display = 'none';
+        grid.innerHTML = this.filteredImages.map(image => `
+            <div class="image-card" data-id="${image.id}">
+                <img src="${image.thumbnail}" alt="thumbnail" class="image-card-image">
+                <div class="image-card-info">
+                    <div class="image-card-date">
+                        ${new Date(image.createdAt).toLocaleDateString('ko-KR')}
+                    </div>
+                    ${image.tags.length > 0 ? `
+                        <div class="image-card-tags">
+                            ${image.tags.map(tag => `
+                                <span class="image-card-tag">${tag}</span>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    ${image.memo ? `<div class="image-card-memo">${escapeHtml(image.memo)}</div>` : ''}
+                </div>
+            </div>
+        `).join('');
+
+        grid.querySelectorAll('.image-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const imageId = parseInt(card.dataset.id);
+                this.openEditModal(imageId);
+            });
+
+            card.querySelectorAll('.image-card-tag').forEach(tag => {
+                tag.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const searchInput = document.getElementById('searchInput');
+                    searchInput.value = tag.textContent;
+                    this.updateClearButton();
+                    this.applyFilters();
+                });
+            });
+        });
+    }
+
     renderGalleryFull() {
         const grid = document.getElementById('galleryGridFull');
         const emptyState = document.getElementById('emptyStateAll');
