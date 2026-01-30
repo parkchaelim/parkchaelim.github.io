@@ -218,6 +218,21 @@
         </div>
     </div>
 
+    <!-- Rename Tag Modal -->
+    <div class="modal" id="renameTagModal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-body">
+                <h3>태그 이름 변경</h3>
+                <input type="text" id="renameTagInput" class="form-input" placeholder="새 태그명">
+                <div class="confirm-actions">
+                    <button class="btn-secondary" id="renameTagCancelBtn">취소</button>
+                    <button class="btn-primary" id="renameTagOkBtn">저장</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="tag-picker-overlay" id="tagPickerOverlay" style="display: none;" onclick="closeTagPicker()"></div>
     <div class="tag-picker" id="tagPicker" style="display: none;">
         <div class="tag-picker-header">

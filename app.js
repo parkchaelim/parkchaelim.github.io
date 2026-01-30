@@ -11,6 +11,9 @@ const appState = {
     sortBy: 'newest',
     currentEditImageId: null,
     currentTagPickerTarget: null,
+    isTagEditMode: false,
+    currentTagToRename: null,
+    currentTagToDelete: null,
     useLocalStorage: false,
 };
 
@@ -326,7 +329,26 @@ function setupAllEventListeners() {
         }
     });
 
-    // Tags Tab
+    // Tags Tab - Edit Mode
+    const editModeBtn = document.getElementById('editModeBtn');
+    if (editModeBtn) {
+        editModeBtn.addEventListener('click', () => {
+            appState.isTagEditMode = true;
+            updateTagEditMode();
+            renderTagsList();
+        });
+    }
+
+    const editDoneBtn = document.getElementById('editDoneBtn');
+    if (editDoneBtn) {
+        editDoneBtn.addEventListener('click', () => {
+            appState.isTagEditMode = false;
+            updateTagEditMode();
+            renderTagsList();
+        });
+    }
+
+    // Tags Search
     const tagsSearchInput = document.getElementById('tagsSearchInput');
     const tagsSearchClear = document.getElementById('tagsSearchClear');
 
@@ -400,6 +422,24 @@ function setupAllEventListeners() {
         });
     }
 
+    // Rename Tag Modal
+    const renameTagCancelBtn = document.getElementById('renameTagCancelBtn');
+    if (renameTagCancelBtn) {
+        renameTagCancelBtn.addEventListener('click', () => {
+            closeModal('renameTagModal');
+        });
+    }
+
+    const renameTagOkBtn = document.getElementById('renameTagOkBtn');
+    if (renameTagOkBtn) {
+        renameTagOkBtn.addEventListener('click', () => {
+            const newName = document.getElementById('renameTagInput').value.trim();
+            if (newName && appState.currentTagToRename) {
+                renameTag(appState.currentTagToRename, newName);
+            }
+        });
+    }
+
     // Confirm Modal
     const confirmCancelBtn = document.getElementById('confirmCancelBtn');
     if (confirmCancelBtn) {
@@ -437,6 +477,26 @@ function switchTab(tabName) {
     const titles = { search: '검색', archive: '보관함', tags: '태그', settings: '설정' };
     const titleEl = document.querySelector('.header-title');
     if (titleEl) titleEl.textContent = titles[tabName];
+
+    if (tabName === 'tags') {
+        updateTagEditMode();
+        renderTagsList();
+    }
+}
+
+// ====== Tags Tab - Edit Mode ======
+function updateTagEditMode() {
+    const editModeBtn = document.getElementById('editModeBtn');
+    const editDoneBtn = document.getElementById('editDoneBtn');
+    const tagsTab = document.getElementById('tagsTab').classList.contains('active');
+
+    if (appState.isTagEditMode && tagsTab) {
+        if (editModeBtn) editModeBtn.style.display = 'none';
+        if (editDoneBtn) editDoneBtn.style.display = 'block';
+    } else {
+        if (editModeBtn) editModeBtn.style.display = tagsTab ? 'block' : 'none';
+        if (editDoneBtn) editDoneBtn.style.display = 'none';
+    }
 }
 
 // ====== Search Tab ======
@@ -511,7 +571,7 @@ function renderSearchGrid() {
     info.textContent = `${appState.filteredImages.length}개`;
 
     grid.innerHTML = appState.filteredImages.map((img, idx) => `
-        <div class="image-card" data-id="${img.id}" onclick="openViewer(${idx})">
+        <div class="image-card" data-id="${img.id}" onclick="openEditModal(${img.id})">
             <img src="${img.thumbnail}" alt="image" style="object-fit: contain;">
         </div>
     `).join('');
@@ -572,16 +632,30 @@ function renderTagsList() {
 
     empty.style.display = 'none';
 
-    list.innerHTML = tags.map(tag => `
-        <div class="tag-list-item" onclick="addTagToSearch('${tag}')">
-            <div class="tag-list-item-left">
-                <span class="tag-list-item-name">${tag}</span>
+    if (appState.isTagEditMode) {
+        list.innerHTML = tags.map(tag => `
+            <div class="tag-list-item">
+                <div class="tag-list-item-left" onclick="openRenameTagModal('${tag}')">
+                    <span class="tag-list-item-name">${tag}</span>
+                </div>
+                <div class="tag-list-item-right">
+                    <span class="tag-count-badge">${appState.tagFrequency[tag] || 0}</span>
+                    <button class="tag-delete-btn" onclick="openDeleteTagConfirm('${tag}')">−</button>
+                </div>
             </div>
-            <div class="tag-list-item-right">
-                <span class="tag-count-badge">${appState.tagFrequency[tag] || 0}</span>
+        `).join('');
+    } else {
+        list.innerHTML = tags.map(tag => `
+            <div class="tag-list-item" onclick="addTagToSearch('${tag}')">
+                <div class="tag-list-item-left">
+                    <span class="tag-list-item-name">${tag}</span>
+                </div>
+                <div class="tag-list-item-right">
+                    <span class="tag-count-badge">${appState.tagFrequency[tag] || 0}</span>
+                </div>
             </div>
-        </div>
-    `).join('');
+        `).join('');
+    }
 }
 
 function addTagToSearch(tag) {
@@ -591,6 +665,103 @@ function addTagToSearch(tag) {
     }
     switchTab('search');
     applyFilters();
+}
+
+// ====== Tag Management ======
+function openRenameTagModal(tag) {
+    appState.currentTagToRename = tag;
+    const input = document.getElementById('renameTagInput');
+    if (input) {
+        input.value = tag;
+        input.focus();
+        input.select();
+    }
+    openModal('renameTagModal');
+}
+
+async function renameTag(oldTag, newTag) {
+    if (!newTag || newTag === oldTag) {
+        closeModal('renameTagModal');
+        return;
+    }
+
+    newTag = newTag.trim().replace(/\s+/g, ' ');
+    if (!newTag) {
+        showToast('태그명을 입력해주세요');
+        return;
+    }
+
+    // 새 태그가 이미 존재하면 병합
+    const isExisting = appState.allTags.includes(newTag);
+
+    // 모든 이미지의 태그 업데이트
+    appState.allImages.forEach(img => {
+        img.tags = img.tags.map(tag => tag === oldTag ? newTag : tag);
+        img.tags = [...new Set(img.tags)]; // 중복 제거
+    });
+
+    // 각 이미지 업데이트
+    for (const img of appState.allImages) {
+        await dbUpdateImage(img);
+    }
+
+    // 태그 목록 업데이트
+    if (!isExisting) {
+        appState.allTags = appState.allTags.filter(t => t !== oldTag);
+        appState.allTags.push(newTag);
+        appState.allTags.sort();
+    } else {
+        appState.allTags = appState.allTags.filter(t => t !== oldTag);
+    }
+    await dbSaveTags(appState.allTags);
+
+    // 빈도 업데이트
+    if (appState.tagFrequency[oldTag]) {
+        appState.tagFrequency[newTag] = appState.tagFrequency[oldTag];
+        delete appState.tagFrequency[oldTag];
+    }
+
+    closeModal('renameTagModal');
+    renderTagsList();
+    applyFilters();
+    renderSearchGrid();
+    renderTagPicker(document.getElementById('tagPickerSearch')?.value.toLowerCase() || '');
+    showToast('태그명 변경됨');
+}
+
+function openDeleteTagConfirm(tag) {
+    const count = appState.tagFrequency[tag] || 0;
+    appState.currentTagToDelete = tag;
+    
+    const text = `태그 '${tag}'를 삭제할까요?\n이 태그가 ${count}개 코디에 적용되어 있습니다.`;
+    showConfirm(text, deleteTag);
+}
+
+async function deleteTag() {
+    const tag = appState.currentTagToDelete;
+    if (!tag) return;
+
+    // 모든 이미지에서 태그 제거
+    appState.allImages.forEach(img => {
+        img.tags = img.tags.filter(t => t !== tag);
+    });
+
+    for (const img of appState.allImages) {
+        await dbUpdateImage(img);
+    }
+
+    // 태그 목록에서 제거
+    appState.allTags = appState.allTags.filter(t => t !== tag);
+    await dbSaveTags(appState.allTags);
+
+    // 빈도 제거
+    delete appState.tagFrequency[tag];
+
+    renderTagsList();
+    applyFilters();
+    renderSearchGrid();
+    showToast('태그 삭제됨');
+    closeModal('confirmModal');
 }
 
 // ====== Upload ======
@@ -675,24 +846,6 @@ function generateThumbnail(dataURL) {
         img.onerror = () => reject(new Error('Image load failed'));
         img.src = dataURL;
     });
-}
-
-// ====== Image Viewer ======
-let currentViewerIndex = 0;
-
-function openViewer(index) {
-    currentViewerIndex = index;
-    const image = appState.filteredImages[index];
-    if (!image) return;
-
-    document.getElementById('viewerImage').src = image.original;
-    document.getElementById('viewerImage').dataset.id = image.id;
-    document.getElementById('viewerCounter').textContent = `${index + 1} / ${appState.filteredImages.length}`;
-    document.getElementById('imageViewer').style.display = 'flex';
-}
-
-function closeViewer() {
-    document.getElementById('imageViewer').style.display = 'none';
 }
 
 // ====== Edit Modal ======
@@ -904,6 +1057,16 @@ function closeModal(id) {
     if (modal) modal.classList.remove('active');
 }
 
+function showConfirm(text, callback) {
+    const confirmText = document.getElementById('confirmText');
+    const confirmOkBtn = document.getElementById('confirmOkBtn');
+    
+    if (confirmText) confirmText.textContent = text;
+    if (confirmOkBtn) confirmOkBtn.onclick = callback;
+    
+    openModal('confirmModal');
+}
+
 function showToast(message) {
     const toast = document.getElementById('toast');
     if (!toast) return;
@@ -921,17 +1084,4 @@ function updateInfoDisplay() {
 
     if (imageCount) imageCount.textContent = appState.allImages.length;
     if (tagCount) tagCount.textContent = appState.allTags.length;
-}
-
-// Viewer navigation (if needed)
-function nextViewerImage() {
-    if (currentViewerIndex < appState.filteredImages.length - 1) {
-        openViewer(currentViewerIndex + 1);
-    }
-}
-
-function prevViewerImage() {
-    if (currentViewerIndex > 0) {
-        openViewer(currentViewerIndex - 1);
-    }
 }
