@@ -1,26 +1,3 @@
-// ====== Debug ======
-console.log('app.js loaded successfully');
-
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOMContentLoaded fired');
-    
-    // 간단한 테스트
-    const testBtn = document.getElementById('addImageBtn');
-    if (testBtn) {
-        console.log('addImageBtn found:', testBtn);
-        testBtn.addEventListener('click', () => {
-            console.log('Button clicked!');
-            alert('버튼이 작동합니다!');
-        });
-    } else {
-        console.error('addImageBtn not found!');
-    }
-});
-
-
-
-
-
 // ====== Global State ======
 const appState = {
     db: null,
