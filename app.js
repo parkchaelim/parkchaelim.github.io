@@ -2,43 +2,45 @@
 class DatabaseManager {
     constructor() {
         this.db = null;
-        this.dbName = 'OutfitArchiveDB';
-        this.version = 1;
         this.init();
     }
 
     init() {
-        const request = indexedDB.open(this.dbName, this.version);
+        return new Promise((resolve) => {
+            const request = indexedDB.open('OutfitArchive', 1);
 
-        request.onerror = () => {
-            console.error('IndexedDB open failed:', request.error);
-        };
+            request.onerror = () => {
+                console.error('IndexedDB init failed, using localStorage fallback');
+                this.useLocalStorage = true;
+                resolve();
+            };
 
-        request.onsuccess = () => {
-            this.db = request.result;
-        };
+            request.onsuccess = () => {
+                this.db = request.result;
+                resolve();
+            };
 
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-
-            if (!db.objectStoreNames.contains('images')) {
-                const imageStore = db.createObjectStore('images', { keyPath: 'id' });
-                imageStore.createIndex('createdAt', 'createdAt', { unique: false });
-            }
-
-            if (!db.objectStoreNames.contains('tags')) {
-                db.createObjectStore('tags', { keyPath: 'name' });
-            }
-        };
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('images')) {
+                    db.createObjectStore('images', { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains('tags')) {
+                    db.createObjectStore('tags', { keyPath: 'name' });
+                }
+            };
+        });
     }
 
     async saveImage(imageData) {
-        return new Promise((resolve, reject) => {
-            if (!this.db) {
-                reject(new Error('Database not initialized'));
-                return;
-            }
+        if (this.useLocalStorage) {
+            const images = JSON.parse(localStorage.getItem('images') || '[]');
+            images.push(imageData);
+            localStorage.setItem('images', JSON.stringify(images));
+            return imageData.id;
+        }
 
+        return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['images'], 'readwrite');
             const store = transaction.objectStore('images');
             const request = store.add(imageData);
@@ -49,6 +51,11 @@ class DatabaseManager {
     }
 
     async getImage(id) {
+        if (this.useLocalStorage) {
+            const images = JSON.parse(localStorage.getItem('images') || '[]');
+            return images.find(img => img.id === id);
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['images'], 'readonly');
             const store = transaction.objectStore('images');
@@ -60,6 +67,10 @@ class DatabaseManager {
     }
 
     async getAllImages() {
+        if (this.useLocalStorage) {
+            return JSON.parse(localStorage.getItem('images') || '[]');
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['images'], 'readonly');
             const store = transaction.objectStore('images');
@@ -71,6 +82,16 @@ class DatabaseManager {
     }
 
     async updateImage(imageData) {
+        if (this.useLocalStorage) {
+            const images = JSON.parse(localStorage.getItem('images') || '[]');
+            const index = images.findIndex(img => img.id === imageData.id);
+            if (index !== -1) {
+                images[index] = imageData;
+                localStorage.setItem('images', JSON.stringify(images));
+            }
+            return imageData.id;
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['images'], 'readwrite');
             const store = transaction.objectStore('images');
@@ -82,6 +103,13 @@ class DatabaseManager {
     }
 
     async deleteImage(id) {
+        if (this.useLocalStorage) {
+            const images = JSON.parse(localStorage.getItem('images') || '[]');
+            const filtered = images.filter(img => img.id !== id);
+            localStorage.setItem('images', JSON.stringify(filtered));
+            return;
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['images'], 'readwrite');
             const store = transaction.objectStore('images');
@@ -93,21 +121,27 @@ class DatabaseManager {
     }
 
     async saveTags(tags) {
+        if (this.useLocalStorage) {
+            localStorage.setItem('tags', JSON.stringify(tags));
+            return;
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['tags'], 'readwrite');
             const store = transaction.objectStore('tags');
             store.clear();
 
-            tags.forEach(tag => {
-                store.add({ name: tag });
-            });
-
+            tags.forEach(tag => store.add({ name: tag }));
             transaction.oncomplete = () => resolve();
             transaction.onerror = () => reject(transaction.error);
         });
     }
 
     async getTags() {
+        if (this.useLocalStorage) {
+            return JSON.parse(localStorage.getItem('tags') || '[]');
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['tags'], 'readonly');
             const store = transaction.objectStore('tags');
@@ -122,6 +156,11 @@ class DatabaseManager {
     }
 
     async clearAll() {
+        if (this.useLocalStorage) {
+            localStorage.clear();
+            return;
+        }
+
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['images', 'tags'], 'readwrite');
             transaction.objectStore('images').clear();
@@ -130,6 +169,39 @@ class DatabaseManager {
             transaction.oncomplete = () => resolve();
             transaction.onerror = () => reject(transaction.error);
         });
+    }
+
+    exportData() {
+        const images = JSON.parse(localStorage.getItem('images') || '[]');
+        const tags = JSON.parse(localStorage.getItem('tags') || '[]');
+        return {
+            version: 1,
+            exportDate: new Date().toISOString(),
+            images,
+            tags
+        };
+    }
+
+    async importData(data, merge = false) {
+        if (!merge) {
+            await this.clearAll();
+        }
+
+        if (this.useLocalStorage) {
+            let images = merge ? JSON.parse(localStorage.getItem('images') || '[]') : [];
+            images = [...images, ...data.images];
+            let tags = merge ? JSON.parse(localStorage.getItem('tags') || '[]') : [];
+            tags = [...new Set([...tags, ...data.tags])];
+            localStorage.setItem('images', JSON.stringify(images));
+            localStorage.setItem('tags', JSON.stringify(tags));
+        } else {
+            for (const image of data.images) {
+                await this.saveImage(image);
+            }
+            const existingTags = await this.getTags();
+            const allTags = [...new Set([...existingTags, ...data.tags])];
+            await this.saveTags(allTags);
+        }
     }
 }
 
@@ -144,7 +216,7 @@ class ImageProcessor {
         });
     }
 
-    static async generateThumbnail(dataURL, maxWidth = 300, maxHeight = 300) {
+    static async generateThumbnail(dataURL) {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
@@ -153,14 +225,14 @@ class ImageProcessor {
                 let height = img.height;
 
                 if (width > height) {
-                    if (width > maxWidth) {
-                        height = Math.round(height * maxWidth / width);
-                        width = maxWidth;
+                    if (width > 400) {
+                        height = Math.round(height * 400 / width);
+                        width = 400;
                     }
                 } else {
-                    if (height > maxHeight) {
-                        width = Math.round(width * maxHeight / height);
-                        height = maxHeight;
+                    if (height > 400) {
+                        width = Math.round(width * 400 / height);
+                        height = 400;
                     }
                 }
 
@@ -169,7 +241,7 @@ class ImageProcessor {
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
 
-                resolve(canvas.toDataURL('image/jpeg', 0.8));
+                resolve(canvas.toDataURL('image/jpeg', 0.85));
             };
             img.onerror = () => reject(new Error('Image load failed'));
             img.src = dataURL;
@@ -177,842 +249,745 @@ class ImageProcessor {
     }
 }
 
-// ====== Tag Manager ======
-class TagManager {
-    constructor(db) {
-        this.db = db;
-        this.allTags = [];
-        this.recentTags = [];
-        this.defaultTags = {
-            recent: [],
+// ====== App State ======
+const appState = {
+    allImages: [],
+    filteredImages: [],
+    allTags: [],
+    recentTags: [],
+    selectedImageIds: new Set(),
+    activeSearchTags: [],
+    useORFilter: false,
+    sortBy: 'newest',
+    currentTab: 'search',
+    scrollPositions: {},
+    isSelectMode: false,
+    db: null,
+};
+
+// ====== Initialization ======
+async function initializeApp() {
+    appState.db = new DatabaseManager();
+    await appState.db.init();
+
+    await loadAllData();
+    setupEventListeners();
+    setupTabNavigation();
+    renderSearchTab();
+
+    // Show search tab by default
+    switchTab('search');
+}
+
+async function loadAllData() {
+    appState.allImages = await appState.db.getAllImages();
+    appState.allTags = await appState.db.getTags();
+    
+    if (appState.allTags.length === 0) {
+        appState.allTags = [
+            '꾸안꾸', '꾸꾸꾸',
+            '가디건', '원피스', '치마', '바지', '코트', '자켓', '니트', '스니커즈', '부츠', '로퍼', '샌들', '가방', '머플러',
+            '흰색', '검정', '회색', '베이지', '브라운', '네이비', '블루', '그린', '올리브', '카키', '레드', '핑크'
+        ];
+        await appState.db.saveTags(appState.allTags);
+    }
+
+    appState.recentTags = JSON.parse(localStorage.getItem('recentTags') || '[]');
+    updateInfoDisplay();
+}
+
+function saveRecentTags() {
+    localStorage.setItem('recentTags', JSON.stringify(appState.recentTags.slice(0, 10)));
+}
+
+function recordTagUsage(tag) {
+    const index = appState.recentTags.indexOf(tag);
+    if (index !== -1) {
+        appState.recentTags.splice(index, 1);
+    }
+    appState.recentTags.unshift(tag);
+    appState.recentTags = appState.recentTags.slice(0, 8);
+    saveRecentTags();
+}
+
+// ====== Event Listeners ======
+function setupEventListeners() {
+    // Search
+    const searchInput = document.getElementById('searchInput');
+    const searchClearBtn = document.getElementById('searchClearBtn');
+    const searchOptionsToggle = document.getElementById('searchOptionsToggle');
+    const filterModeToggle = document.getElementById('filterModeToggle');
+    const sortBy = document.getElementById('sortBy');
+    const imageInput = document.getElementById('imageInput');
+    const uploadArea = document.getElementById('uploadArea');
+    const addImageBtn = document.getElementById('addImageBtn');
+
+    searchInput.addEventListener('input', (e) => {
+        searchClearBtn.style.display = e.target.value ? 'flex' : 'none';
+        applyFilters();
+    });
+
+    searchClearBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        searchClearBtn.style.display = 'none';
+        applyFilters();
+    });
+
+    searchOptionsToggle.addEventListener('click', () => {
+        const options = document.getElementById('searchOptions');
+        options.style.display = options.style.display === 'none' ? 'flex' : 'none';
+    });
+
+    filterModeToggle.addEventListener('click', () => {
+        appState.useORFilter = !appState.useORFilter;
+        const label = document.getElementById('filterModeLabel');
+        label.textContent = appState.useORFilter ? '하나라도 포함' : '모두 포함';
+        applyFilters();
+    });
+
+    sortBy.addEventListener('change', (e) => {
+        appState.sortBy = e.target.value;
+        applyFilters();
+    });
+
+    // Tag Categories
+    document.querySelectorAll('.tag-category-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.tag-category-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            renderTagChips(e.target.dataset.category);
+        });
+    });
+
+    // Upload
+    uploadArea.addEventListener('click', () => imageInput.click());
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = 'var(--primary)';
+    });
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.style.borderColor = 'var(--border)';
+    });
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = 'var(--border)';
+        handleFiles(e.dataTransfer.files);
+    });
+
+    imageInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+        e.target.value = '';
+    });
+
+    document.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items || [];
+        const files = [];
+        for (let item of items) {
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                files.push(item.getAsFile());
+            }
+        }
+        if (files.length > 0) {
+            handleFiles(files);
+        }
+    });
+
+    // Archive Tab
+    addImageBtn.addEventListener('click', () => {
+        document.getElementById('addImageModal').classList.add('active');
+    });
+
+    document.getElementById('addImageCloseBtn').addEventListener('click', () => {
+        document.getElementById('addImageModal').classList.remove('active');
+    });
+
+    document.getElementById('selectModeBtn').addEventListener('click', () => {
+        appState.isSelectMode = !appState.isSelectMode;
+        document.getElementById('selectModeBtn').textContent = appState.isSelectMode ? '완료' : '선택';
+        updateSelectionUI();
+    });
+
+    document.getElementById('selectAllBtn').addEventListener('click', () => {
+        document.querySelectorAll('#archiveGrid .image-card').forEach(card => {
+            appState.selectedImageIds.add(parseInt(card.dataset.id));
+            card.classList.add('selected');
+        });
+        updateSelectionUI();
+    });
+
+    document.getElementById('deselectAllBtn').addEventListener('click', () => {
+        appState.selectedImageIds.clear();
+        document.querySelectorAll('#archiveGrid .image-card').forEach(card => {
+            card.classList.remove('selected');
+        });
+        updateSelectionUI();
+    });
+
+    // Modal Actions
+    document.getElementById('uploadConfirmBtn').addEventListener('click', async () => {
+        const files = document.getElementById('imageInput').files;
+        if (files.length === 0) {
+            showToast('이미지를 선택해주세요');
+            return;
+        }
+        await uploadImages(Array.from(files));
+    });
+
+    document.getElementById('detailCloseBtn').addEventListener('click', () => {
+        closeDetailModal();
+    });
+
+    document.getElementById('detailSaveBtn').addEventListener('click', async () => {
+        await saveImageDetail();
+    });
+
+    document.getElementById('detailDeleteBtn').addEventListener('click', () => {
+        showConfirmModal('정말 삭제하시겠습니까?', async () => {
+            const imageId = parseInt(document.getElementById('detailImage').dataset.id);
+            await appState.db.deleteImage(imageId);
+            appState.allImages = appState.allImages.filter(img => img.id !== imageId);
+            closeDetailModal();
+            applyFilters();
+            renderArchiveTab();
+            showToast('삭제되었습니다');
+        });
+    });
+
+    // Settings
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        const data = appState.db.exportData();
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `outfit-archive-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('내보내졌습니다');
+    });
+
+    document.getElementById('importBtn').addEventListener('click', () => {
+        document.getElementById('importFile').click();
+    });
+
+    document.getElementById('importFile').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                const merge = confirm('기존 데이터와 병합하시겠습니까?');
+                await appState.db.importData(data, merge);
+                await loadAllData();
+                applyFilters();
+                renderArchiveTab();
+                showToast('가져왔습니다');
+            } catch (error) {
+                showToast('가져오기 실패: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        showConfirmModal('모든 데이터가 삭제됩니다. 계속하시겠습니까?', async () => {
+            await appState.db.clearAll();
+            appState.allImages = [];
+            appState.allTags = [];
+            appState.selectedImageIds.clear();
+            await loadAllData();
+            applyFilters();
+            renderArchiveTab();
+            renderTagsTab();
+            showToast('초기화되었습니다');
+        });
+    });
+
+    // Tag detail modal
+    document.getElementById('detailCloseBtn').addEventListener('click', closeDetailModal);
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => {
+        document.getElementById('confirmModal').classList.remove('active');
+    });
+}
+
+function setupTabNavigation() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            switchTab(tab);
+        });
+    });
+}
+
+function switchTab(tabName) {
+    // Save scroll position
+    const mainContent = document.querySelector('.main-content');
+    if (appState.currentTab === 'archive') {
+        appState.scrollPositions['archive'] = mainContent.scrollTop;
+    } else if (appState.currentTab === 'search') {
+        appState.scrollPositions['search'] = mainContent.scrollTop;
+    }
+
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+    // Show selected tab
+    const tabContent = document.getElementById(tabName + 'Tab');
+    if (tabContent) {
+        tabContent.classList.add('active');
+    }
+    
+    const tabBtn = document.querySelector(`[data-tab="${tabName}"]`);
+    if (tabBtn) {
+        tabBtn.classList.add('active');
+    }
+
+    // Update header
+    const titles = {
+        search: '검색',
+        archive: '보관함',
+        tags: '태그',
+        settings: '설정'
+    };
+    document.getElementById('headerTitle').textContent = titles[tabName];
+
+    appState.currentTab = tabName;
+
+    // Render content
+    if (tabName === 'search') {
+        renderSearchTab();
+    } else if (tabName === 'archive') {
+        renderArchiveTab();
+    } else if (tabName === 'tags') {
+        renderTagsTab();
+    }
+
+    // Restore scroll position
+    setTimeout(() => {
+        mainContent.scrollTop = appState.scrollPositions[tabName] || 0;
+    }, 0);
+}
+
+// ====== Search Tab ======
+function renderSearchTab() {
+    renderTagChips('recent');
+    applyFilters();
+}
+
+function renderTagChips(category) {
+    const container = document.getElementById('tagChips');
+    let tags = [];
+
+    if (category === 'recent') {
+        tags = appState.recentTags;
+    } else if (category === 'popular') {
+        const tagFreq = {};
+        appState.allImages.forEach(img => {
+            img.tags.forEach(tag => {
+                tagFreq[tag] = (tagFreq[tag] || 0) + 1;
+            });
+        });
+        tags = Object.entries(tagFreq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 12)
+            .map(entry => entry[0]);
+    } else {
+        const categoryMap = {
             color: ['흰색', '검정', '회색', '베이지', '브라운', '네이비', '블루', '그린', '올리브', '카키', '레드', '핑크'],
             item: ['가디건', '원피스', '치마', '바지', '코트', '자켓', '니트', '스니커즈', '부츠', '로퍼', '샌들', '가방', '머플러'],
             style: ['꾸안꾸', '꾸꾸꾸']
         };
-        this.initTags();
+        tags = categoryMap[category] || [];
     }
 
-    async initTags() {
-        this.allTags = await this.db.getTags();
-        
-        if (this.allTags.length === 0) {
-            const allDefaultTags = [
-                ...this.defaultTags.recent,
-                ...this.defaultTags.color,
-                ...this.defaultTags.item,
-                ...this.defaultTags.style
-            ];
-            this.allTags = allDefaultTags;
-            await this.db.saveTags(this.allTags);
-        }
-
-        // Load recent tags from localStorage
-        this.recentTags = JSON.parse(localStorage.getItem('recentTags') || '[]');
-    }
-
-    getFilteredTags(input) {
-        const lowerInput = input.toLowerCase();
-        return this.allTags.filter(tag => 
-            tag.toLowerCase().includes(lowerInput)
-        ).slice(0, 10);
-    }
-
-    getTagsByCategory(category) {
-        if (category === 'recent') {
-            return this.recentTags.slice(0, 8);
-        }
-        return this.defaultTags[category] || [];
-    }
-
-    recordTagUsage(tag) {
-        const index = this.recentTags.indexOf(tag);
-        if (index > -1) {
-            this.recentTags.splice(index, 1);
-        }
-        this.recentTags.unshift(tag);
-        this.recentTags = this.recentTags.slice(0, 8);
-        localStorage.setItem('recentTags', JSON.stringify(this.recentTags));
-    }
-
-    async addTag(tag) {
-        const trimmedTag = tag.trim();
-        if (!trimmedTag || this.allTags.includes(trimmedTag)) {
-            return;
-        }
-        this.allTags.push(trimmedTag);
-        this.allTags.sort();
-        await this.db.saveTags(this.allTags);
-        this.recordTagUsage(trimmedTag);
-    }
-
-    async addMultipleTags(tags) {
-        for (const tag of tags) {
-            await this.addTag(tag);
-        }
-    }
+    container.innerHTML = tags.map(tag => `
+        <button class="tag-chip ${appState.activeSearchTags.includes(tag.toLowerCase()) ? 'selected' : ''}" 
+                onclick="toggleSearchTag('${tag}')">
+            ${tag}
+        </button>
+    `).join('');
 }
 
-// ====== Search Manager ======
-class SearchManager {
-    static parseSearchQuery(query) {
-        if (!query.trim()) return [];
-        return query.split(/[\s,]+/)
-            .map(tag => tag.trim())
-            .filter(tag => tag.length > 0)
-            .map(tag => tag.toLowerCase());
+function toggleSearchTag(tag) {
+    const lowerTag = tag.toLowerCase();
+    const index = appState.activeSearchTags.indexOf(lowerTag);
+    
+    if (index !== -1) {
+        appState.activeSearchTags.splice(index, 1);
+    } else {
+        appState.activeSearchTags.push(lowerTag);
+        recordTagUsage(tag);
     }
 
-    static filterImages(images, searchTags, useOR = false) {
-        if (searchTags.length === 0) return images;
+    applyFilters();
+    renderTagChips(document.querySelector('.tag-category-btn.active').dataset.category);
+}
 
-        return images.filter(image => {
-            const imageTags = image.tags.map(t => t.toLowerCase());
-            
-            if (useOR) {
-                return searchTags.some(tag => imageTags.includes(tag));
+function applyFilters() {
+    const searchInput = document.getElementById('searchInput').value.toLowerCase().trim();
+    const searchTerms = searchInput ? searchInput.split(/\s+/) : [];
+
+    let filtered = appState.allImages.filter(img => {
+        const imageTags = img.tags.map(t => t.toLowerCase());
+        
+        // Search term matching
+        if (searchTerms.length > 0) {
+            const hasAllSearchTerms = searchTerms.every(term =>
+                imageTags.some(tag => tag.includes(term)) ||
+                (img.memo && img.memo.toLowerCase().includes(term))
+            );
+            if (!hasAllSearchTerms) return false;
+        }
+
+        // Tag filtering
+        if (appState.activeSearchTags.length > 0) {
+            if (appState.useORFilter) {
+                return appState.activeSearchTags.some(tag => imageTags.includes(tag));
             } else {
-                return searchTags.every(tag => imageTags.includes(tag));
+                return appState.activeSearchTags.every(tag => imageTags.includes(tag));
             }
-        });
+        }
+
+        return true;
+    });
+
+    // Sorting
+    filtered.sort((a, b) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        return appState.sortBy === 'newest' ? timeB - timeA : timeA - timeB;
+    });
+
+    appState.filteredImages = filtered;
+    renderSearchResults();
+}
+
+function renderSearchResults() {
+    const grid = document.getElementById('searchResultsGrid');
+    const empty = document.getElementById('searchEmptyState');
+    const info = document.getElementById('resultsInfo');
+
+    if (appState.filteredImages.length === 0) {
+        grid.innerHTML = '';
+        empty.style.display = 'block';
+        info.textContent = '';
+        return;
     }
 
-    static sortImages(images, sortBy = 'newest') {
-        const sorted = [...images];
-        sorted.sort((a, b) => {
-            const timeA = new Date(a.createdAt).getTime();
-            const timeB = new Date(b.createdAt).getTime();
-            return sortBy === 'newest' ? timeB - timeA : timeA - timeB;
-        });
-        return sorted;
+    empty.style.display = 'none';
+    info.textContent = `${appState.filteredImages.length}개`;
+
+    grid.innerHTML = appState.filteredImages.map(img => `
+        <div class="image-card" data-id="${img.id}" onclick="openDetailModal(${img.id})">
+            <img src="${img.thumbnail}" alt="image">
+            ${img.tags.length > 0 ? `
+                <div class="image-card-overlay">
+                    ${img.tags.slice(0, 2).map(tag => `<span class="image-card-tag">${tag}</span>`).join('')}
+                    ${img.tags.length > 2 ? `<span class="image-card-tag">+${img.tags.length - 2}</span>` : ''}
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+}
+
+// ====== Archive Tab ======
+function renderArchiveTab() {
+    const grid = document.getElementById('archiveGrid');
+    const empty = document.getElementById('archiveEmptyState');
+
+    if (appState.allImages.length === 0) {
+        grid.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+
+    empty.style.display = 'none';
+
+    const sorted = [...appState.allImages].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    grid.innerHTML = sorted.map(img => `
+        <div class="image-card ${appState.selectedImageIds.has(img.id) ? 'selected' : ''}" 
+             data-id="${img.id}" 
+             onclick="handleImageCardClick(event, ${img.id})">
+            <img src="${img.thumbnail}" alt="image">
+            ${img.tags.length > 0 ? `
+                <div class="image-card-overlay">
+                    ${img.tags.slice(0, 2).map(tag => `<span class="image-card-tag">${tag}</span>`).join('')}
+                    ${img.tags.length > 2 ? `<span class="image-card-tag">+${img.tags.length - 2}</span>` : ''}
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+}
+
+function handleImageCardClick(event, imageId) {
+    if (appState.isSelectMode) {
+        if (appState.selectedImageIds.has(imageId)) {
+            appState.selectedImageIds.delete(imageId);
+        } else {
+            appState.selectedImageIds.add(imageId);
+        }
+        updateSelectionUI();
+        renderArchiveTab();
+    } else {
+        openDetailModal(imageId);
     }
 }
 
-// ====== UI Manager ======
-class UIManager {
-    constructor(db, tagManager) {
-        this.db = db;
-        this.tagManager = tagManager;
-        this.currentImages = [];
-        this.filteredImages = [];
-        this.currentEditingImage = null;
-        this.activeSearchTags = [];
-        this.useORFilter = false;
-        this.currentSortBy = 'newest';
-        this.scrollPosition = {};
-        this.selectedImageIds = new Set();
-        this.currentCategory = 'recent';
-        this.currentTab = 'storage';
-        this.setupEventListeners();
+function updateSelectionUI() {
+    const bar = document.getElementById('multiSelectBar');
+    const count = document.getElementById('selectionCount');
+    
+    if (appState.isSelectMode && appState.selectedImageIds.size > 0) {
+        bar.style.display = 'flex';
+        count.textContent = `${appState.selectedImageIds.size}개 선택`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+// ====== Tags Tab ======
+function renderTagsTab() {
+    const list = document.getElementById('tagsList');
+    const sortBy = document.getElementById('tagsSortBy').value;
+
+    let tags = [...appState.allTags];
+
+    if (sortBy === 'frequency') {
+        const tagFreq = {};
+        appState.allImages.forEach(img => {
+            img.tags.forEach(tag => {
+                tagFreq[tag] = (tagFreq[tag] || 0) + 1;
+            });
+        });
+        tags.sort((a, b) => (tagFreq[b] || 0) - (tagFreq[a] || 0));
+    } else {
+        tags.sort();
     }
 
-    setupEventListeners() {
-        // Tab Navigation
-        document.getElementById('storageTab').addEventListener('click', () => {
-            this.switchTab('storage');
-        });
-        document.getElementById('filterTab').addEventListener('click', () => {
-            this.switchTab('filter');
-        });
+    list.innerHTML = tags.map(tag => `
+        <button class="tag-item" onclick="navigateToSearchWithTag('${tag}')">
+            ${tag}
+        </button>
+    `).join('');
+}
 
-        // Search Trigger
-        document.getElementById('searchTrigger').addEventListener('click', () => {
-            this.switchTab('filter');
-        });
+function navigateToSearchWithTag(tag) {
+    appState.activeSearchTags = [tag.toLowerCase()];
+    switchTab('search');
+    applyFilters();
+}
 
-        // Quick Add
-        document.getElementById('quickAddBtn').addEventListener('click', () => {
-            document.getElementById('uploadModal').style.display = 'flex';
-        });
+// ====== Detail Modal ======
+async function openDetailModal(imageId) {
+    const image = appState.allImages.find(img => img.id === imageId);
+    if (!image) return;
 
-        document.getElementById('quickFileInput').addEventListener('change', (e) => {
-            this.handleFiles(e.target.files);
-            e.target.value = '';
-        });
+    const modal = document.getElementById('imageDetailModal');
+    const detailImage = document.getElementById('detailImage');
+    const detailTagInput = document.getElementById('detailTagInput');
+    const detailMemo = document.getElementById('detailMemo');
+    const detailTagChips = document.getElementById('detailTagChips');
 
-        // Grid Selector
-        document.querySelectorAll('.grid-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                
-                const cols = e.target.dataset.cols;
-                const grid = document.getElementById('galleryGrid');
-                const searchGrid = document.getElementById('searchResultGrid');
-                
-                grid.className = `gallery-grid gallery-grid-${cols}col`;
-                searchGrid.className = `gallery-grid gallery-grid-${cols}col`;
-                
-                // Save preference
-                localStorage.setItem('gridCols', cols);
-            });
-        });
+    detailImage.src = image.original;
+    detailImage.dataset.id = imageId;
+    detailTagInput.value = '';
+    detailMemo.value = image.memo || '';
+    
+    detailTagChips.innerHTML = image.tags.map(tag => `
+        <div class="tag-chip-selected">
+            ${tag}
+            <button class="tag-chip-remove-btn" onclick="removeTag('${tag}')">✕</button>
+        </div>
+    `).join('');
 
-        // Upload Modal
-        const uploadArea = document.getElementById('uploadArea');
-        uploadArea.addEventListener('click', () => {
-            document.getElementById('quickFileInput').click();
-        });
-
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = 'var(--primary-color)';
-        });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.style.borderColor = 'var(--border-color)';
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = 'var(--border-color)';
-            this.handleFiles(e.dataTransfer.files);
-        });
-
-        document.addEventListener('paste', (e) => {
-            const items = e.clipboardData?.items || [];
-            const files = [];
-            for (let item of items) {
-                if (item.kind === 'file' && item.type.startsWith('image/')) {
-                    files.push(item.getAsFile());
-                }
-            }
-            if (files.length > 0) {
-                this.handleFiles(files);
-            }
-        });
-
-        // Filter Tab
-        document.getElementById('searchInput').addEventListener('input', () => {
-            this.updateTagList();
-        });
-
-        document.getElementById('searchClose').addEventListener('click', () => {
-            this.switchTab('storage');
-        });
-
-        document.getElementById('toggleFilterMode').addEventListener('click', () => {
-            this.useORFilter = !this.useORFilter;
-            this.updateFilterModeText();
-            this.applyFilters();
-        });
-
-        document.getElementById('sortBy').addEventListener('change', (e) => {
-            this.currentSortBy = e.target.value;
-            this.applyFilters();
-        });
-
-        // Category Tabs
-        document.querySelectorAll('.category-tab').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.category-tab').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.currentCategory = e.target.dataset.category;
-                this.updateTagList();
-            });
-        });
-
-        // Selection Mode
-        document.getElementById('selectAllBtn').addEventListener('click', () => {
-            document.querySelectorAll('.image-card-2col').forEach(card => {
-                this.selectedImageIds.add(parseInt(card.dataset.id));
-                card.classList.add('selected');
-            });
-            this.updateSelectionUI();
-        });
-
-        document.getElementById('deselectAllBtn').addEventListener('click', () => {
-            this.selectedImageIds.clear();
-            document.querySelectorAll('.image-card-2col').forEach(card => {
-                card.classList.remove('selected');
-            });
-            this.updateSelectionUI();
-        });
-
-        document.getElementById('deleteSelectedBtn').addEventListener('click', () => {
-            this.showDeleteActionSheet();
-        });
-
-        // Edit Modal
-        document.getElementById('editModal').addEventListener('click', (e) => {
-            if (e.target.id === 'editModal') this.closeEditModal();
-        });
-
-        document.querySelector('#editModal .modal-close').addEventListener('click', () => {
-            this.closeEditModal();
-        });
-
-        document.querySelector('#editModal .btn-back').addEventListener('click', () => {
-            this.closeEditModal();
-        });
-
-        document.getElementById('editSaveBtn').addEventListener('click', () => {
-            this.saveEditImage();
-        });
-
-        document.getElementById('editCancelBtn').addEventListener('click', () => {
-            this.closeEditModal();
-        });
-
-        // Tag Quick Bar
-        document.querySelectorAll('.quick-category').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                document.querySelectorAll('.quick-category').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                this.updateQuickTags(e.target.dataset.category);
-            });
-        });
-
-        // Edit Tag Input
-        const editTagInput = document.getElementById('editTagInput');
-        editTagInput.addEventListener('input', () => {
-            this.updateEditTagSuggestions();
-        });
-
-        editTagInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.addEditTag(editTagInput.value);
-                editTagInput.value = '';
-                editTagInput.focus();
-            }
-        });
-
-        // Upload Modal Close
-        document.getElementById('uploadModal').addEventListener('click', (e) => {
-            if (e.target.id === 'uploadModal') {
-                document.getElementById('uploadModal').style.display = 'none';
-            }
-        });
-
-        document.querySelector('#uploadModal .modal-close').addEventListener('click', () => {
-            document.getElementById('uploadModal').style.display = 'none';
-        });
-
-        // Delete Action Sheet
-        document.getElementById('deleteConfirmBtn').addEventListener('click', () => {
-            this.confirmDeleteSelected();
-        });
-
-        document.getElementById('deleteCancel').addEventListener('click', () => {
-            document.getElementById('deleteActionSheet').style.display = 'none';
-        });
-    }
-
-    switchTab(tabName) {
-        // Save scroll position
-        if (this.currentTab === 'storage') {
-            const gallery = document.getElementById('galleryGrid');
-            if (gallery && gallery.parentElement) {
-                this.scrollPosition['storage'] = gallery.parentElement.scrollTop;
-            }
-        }
-
-        // Update tabs
-        const isStorage = tabName === 'storage';
-        document.getElementById('storageTab').classList.toggle('active', isStorage);
-        document.getElementById('filterTab').classList.toggle('active', !isStorage);
-
-        document.getElementById('storageTabContent').classList.toggle('active', isStorage);
-        document.getElementById('filterTabContent').classList.toggle('active', !isStorage);
-
-        this.currentTab = tabName;
-
-        if (tabName === 'storage') {
-            // Restore scroll position
-            setTimeout(() => {
-                const gallery = document.getElementById('galleryGrid');
-                if (gallery && gallery.parentElement) {
-                    gallery.parentElement.scrollTop = this.scrollPosition['storage'] || 0;
-                }
-            }, 0);
-        }
-    }
-
-    async handleFiles(files) {
-        const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    // Setup autocomplete
+    detailTagInput.addEventListener('input', () => {
+        const value = detailTagInput.value.toLowerCase();
+        const autocomplete = document.getElementById('tagAutocomplete');
         
-        if (imageFiles.length === 0) {
-            this.showToast('이미지 파일을 선택해주세요.', 'error');
-            return;
-        }
-
-        document.getElementById('uploadModal').style.display = 'none';
-        this.showUploadProgress(0, imageFiles.length);
-
-        for (let i = 0; i < imageFiles.length; i++) {
-            try {
-                const file = imageFiles[i];
-                const dataURL = await ImageProcessor.fileToDataURL(file);
-                const thumbnail = await ImageProcessor.generateThumbnail(dataURL);
-
-                const imageData = {
-                    id: Date.now() + i,
-                    thumbnail: thumbnail,
-                    original: dataURL,
-                    tags: [],
-                    memo: '',
-                    createdAt: new Date().toISOString()
-                };
-
-                await this.db.saveImage(imageData);
-                this.updateUploadProgress(i + 1, imageFiles.length);
-            } catch (error) {
-                console.error('Error processing image:', error);
-            }
-        }
-
-        this.hideUploadProgress();
-        this.showToast(`저장됨 · 태그 추가하기`);
-        await this.loadImages();
-    }
-
-    showUploadProgress(current, total) {
-        const modal = document.getElementById('uploadProgressModal');
-        const progressFill = document.getElementById('progressFill');
-        const progressText = document.getElementById('progressText');
-
-        modal.style.display = 'flex';
-        progressFill.style.width = '0%';
-        progressText.textContent = `0 / ${total}`;
-    }
-
-    updateUploadProgress(current, total) {
-        const progressFill = document.getElementById('progressFill');
-        const progressText = document.getElementById('progressText');
-
-        const percent = (current / total) * 100;
-        progressFill.style.width = percent + '%';
-        progressText.textContent = `${current} / ${total}`;
-    }
-
-    hideUploadProgress() {
-        document.getElementById('uploadProgressModal').style.display = 'none';
-    }
-
-    updateTagList() {
-        const searchInput = document.getElementById('searchInput').value.trim();
-        const tagList = document.getElementById('tagList');
-        let tags;
-
-        if (searchInput) {
-            tags = this.tagManager.getFilteredTags(searchInput);
-        } else {
-            tags = this.tagManager.getTagsByCategory(this.currentCategory);
-        }
-
-        tagList.innerHTML = tags.map(tag => `
-            <div class="tag-chip" data-tag="${tag}">${tag}</div>
-        `).join('');
-
-        document.querySelectorAll('#tagList .tag-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                const tag = chip.dataset.tag.toLowerCase();
-                const index = this.activeSearchTags.indexOf(tag);
-                
-                if (index > -1) {
-                    this.activeSearchTags.splice(index, 1);
-                    chip.classList.remove('active');
-                } else {
-                    this.activeSearchTags.push(tag);
-                    chip.classList.add('active');
-                }
-
-                this.updateActiveFilters();
-                this.applyFilters();
-                this.tagManager.recordTagUsage(chip.dataset.tag);
-            });
-
-            if (this.activeSearchTags.includes(chip.dataset.tag.toLowerCase())) {
-                chip.classList.add('active');
-            }
-        });
-    }
-
-    updateActiveFilters() {
-        const container = document.getElementById('activeFilters');
-        container.innerHTML = this.activeSearchTags.map(tag => `
-            <div class="active-filter-chip">
-                ${tag}
-                <span class="remove">✕</span>
-            </div>
-        `).join('');
-
-        document.querySelectorAll('.active-filter-chip').forEach(chip => {
-            chip.querySelector('.remove').addEventListener('click', () => {
-                const tag = chip.textContent.trim().replace('✕', '').trim();
-                const index = this.activeSearchTags.indexOf(tag);
-                if (index > -1) {
-                    this.activeSearchTags.splice(index, 1);
-                }
-                this.updateActiveFilters();
-                this.updateTagList();
-                this.applyFilters();
-            });
-        });
-    }
-
-    updateFilterModeText() {
-        const btn = document.getElementById('toggleFilterMode');
-        btn.querySelector('#filterModeText').textContent = 
-            this.useORFilter ? '하나라도 포함' : '모두 포함';
-    }
-
-    applyFilters() {
-        const sortBy = document.getElementById('sortBy').value;
-
-        let filtered = SearchManager.filterImages(
-            this.currentImages, 
-            this.activeSearchTags, 
-            this.useORFilter
-        );
-        filtered = SearchManager.sortImages(filtered, sortBy);
-
-        this.filteredImages = filtered;
-        this.updateResultInfo();
-        this.renderSearchResults();
-    }
-
-    updateResultInfo() {
-        const info = document.getElementById('resultInfo');
-        const total = this.currentImages.length;
-        const filtered = this.filteredImages.length;
-
-        if (this.activeSearchTags.length === 0) {
-            info.textContent = `전체 ${total}개`;
-        } else {
-            info.textContent = `${filtered}개 / 전체 ${total}개`;
-        }
-    }
-
-    updateQuickTags(category) {
-        const tags = this.tagManager.getTagsByCategory(category);
-        const container = document.getElementById('quickTagChips');
-
-        container.innerHTML = tags.map(tag => `
-            <div class="tag-chip" data-tag="${tag}">${tag}</div>
-        `).join('');
-
-        document.querySelectorAll('#quickTagChips .tag-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                this.addEditTag(chip.dataset.tag);
-                this.tagManager.recordTagUsage(chip.dataset.tag);
-            });
-        });
-    }
-
-    updateEditTagSuggestions() {
-        const input = document.getElementById('editTagInput').value.trim();
-        const suggestionsDiv = document.getElementById('editTagSuggestions');
-
-        if (input.length === 0) {
-            suggestionsDiv.classList.remove('active');
-            return;
-        }
-
-        const suggestions = this.tagManager.getFilteredTags(input);
-        const currentTags = Array.from(
-            document.querySelectorAll('#editTagList .tag-item')
-        ).map(el => el.textContent.trim().replace('✕', '').trim());
-
-        const filtered = suggestions.filter(s => !currentTags.includes(s));
-
-        if (filtered.length === 0) {
-            suggestionsDiv.classList.remove('active');
-            return;
-        }
-
-        suggestionsDiv.innerHTML = filtered.map(tag => 
-            `<div class="suggestion-item" data-tag="${tag}">${tag}</div>`
-        ).join('');
-        suggestionsDiv.classList.add('active');
-
-        document.querySelectorAll('#editTagSuggestions .suggestion-item').forEach(item => {
-            item.addEventListener('click', () => {
-                this.addEditTag(item.dataset.tag);
-                document.getElementById('editTagInput').value = '';
-                document.getElementById('editTagInput').focus();
-            });
-        });
-    }
-
-    addEditTag(tag) {
-        const trimmedTag = tag.trim();
-        if (!trimmedTag) return;
-
-        const existingTags = Array.from(
-            document.querySelectorAll('#editTagList .tag-item')
-        ).map(el => el.textContent.trim().replace('✕', '').trim());
-
-        if (existingTags.includes(trimmedTag)) return;
-
-        const tagList = document.getElementById('editTagList');
-        const tagEl = document.createElement('div');
-        tagEl.className = 'tag-item';
-        tagEl.innerHTML = `${trimmedTag}<span class="remove">✕</span>`;
-
-        tagEl.querySelector('.remove').addEventListener('click', () => {
-            tagEl.remove();
-        });
-
-        tagList.appendChild(tagEl);
-        document.getElementById('editTagSuggestions').classList.remove('active');
-    }
-
-    async openEditModal(imageId) {
-        const image = await this.db.getImage(imageId);
-        if (!image) return;
-
-        this.currentEditingImage = image;
-
-        document.getElementById('editImage').src = image.original;
-        document.getElementById('editMemo').value = image.memo || '';
-
-        const tagList = document.getElementById('editTagList');
-        tagList.innerHTML = '';
-        image.tags.forEach(tag => {
-            const tagEl = document.createElement('div');
-            tagEl.className = 'tag-item';
-            tagEl.innerHTML = `${tag}<span class="remove">✕</span>`;
-            tagEl.querySelector('.remove').addEventListener('click', () => tagEl.remove());
-            tagList.appendChild(tagEl);
-        });
-
-        document.getElementById('editTagInput').value = '';
-        document.getElementById('editTagSuggestions').classList.remove('active');
-
-        // Update quick tags
-        this.updateQuickTags('recent');
-
-        document.getElementById('editModal').style.display = 'flex';
-        document.getElementById('editTagInput').focus();
-    }
-
-    closeEditModal() {
-        document.getElementById('editModal').style.display = 'none';
-        this.currentEditingImage = null;
-    }
-
-    async saveEditImage() {
-        if (!this.currentEditingImage) return;
-
-        const tags = Array.from(
-            document.querySelectorAll('#editTagList .tag-item')
-        ).map(el => el.textContent.trim().replace('✕', '').trim());
-
-        const memo = document.getElementById('editMemo').value;
-
-        this.currentEditingImage.tags = tags;
-        this.currentEditingImage.memo = memo;
-
-        try {
-            await this.db.updateImage(this.currentEditingImage);
-            await this.tagManager.addMultipleTags(tags);
-            this.showToast('저장되었습니다.');
-            this.closeEditModal();
-            await this.loadImages();
-        } catch (error) {
-            this.showToast(`저장 실패: ${error.message}`, 'error');
-        }
-    }
-
-    showDeleteActionSheet() {
-        if (this.selectedImageIds.size === 0) {
-            this.showToast('선택된 이미지가 없습니다.', 'error');
-            return;
-        }
-        document.getElementById('deleteActionSheet').style.display = 'flex';
-    }
-
-    async confirmDeleteSelected() {
-        if (this.selectedImageIds.size === 0) return;
-
-        try {
-            for (const id of this.selectedImageIds) {
-                await this.db.deleteImage(id);
-            }
-            const count = this.selectedImageIds.size;
-            this.showToast(`${count}개 삭제되었습니다.`);
-            this.selectedImageIds.clear();
-            document.getElementById('deleteActionSheet').style.display = 'none';
-            await this.loadImages();
-        } catch (error) {
-            this.showToast(`삭제 실패: ${error.message}`, 'error');
-        }
-    }
-
-    async loadImages() {
-        try {
-            this.currentImages = await this.db.getAllImages();
-            this.renderGallery();
-            this.updateRecentTags();
+        if (value) {
+            const suggestions = appState.allTags.filter(tag =>
+                tag.toLowerCase().includes(value) &&
+                !image.tags.map(t => t.toLowerCase()).includes(tag.toLowerCase())
+            );
             
-            // Load saved grid preference
-            const savedCols = localStorage.getItem('gridCols') || '3';
-            const gridBtn = document.querySelector(`[data-cols="${savedCols}"]`);
-            if (gridBtn) {
-                document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('active'));
-                gridBtn.classList.add('active');
-                
-                const grid = document.getElementById('galleryGrid');
-                const searchGrid = document.getElementById('searchResultGrid');
-                grid.className = `gallery-grid gallery-grid-${savedCols}col`;
-                searchGrid.className = `gallery-grid gallery-grid-${savedCols}col`;
+            if (suggestions.length > 0) {
+                autocomplete.innerHTML = suggestions.map(tag => `
+                    <div class="autocomplete-item" onclick="selectAutocompleteTag('${tag}')">${tag}</div>
+                `).join('');
+                autocomplete.style.display = 'block';
+            } else {
+                autocomplete.style.display = 'none';
             }
-        } catch (error) {
-            this.showToast(`로드 실패: ${error.message}`, 'error');
-        }
-    }
-
-    renderGallery() {
-        const grid = document.getElementById('galleryGrid');
-        const emptyState = document.getElementById('emptyState');
-
-        if (this.currentImages.length === 0) {
-            grid.innerHTML = '';
-            emptyState.style.display = 'flex';
-            return;
-        }
-
-        emptyState.style.display = 'none';
-        const sorted = SearchManager.sortImages([...this.currentImages], 'newest');
-
-        grid.innerHTML = sorted.map(image => `
-            <div class="image-card-2col" data-id="${image.id}">
-                <img src="${image.thumbnail}" alt="thumbnail">
-                ${image.tags.length > 0 ? `
-                    <div class="tag-overlay">
-                        ${image.tags.slice(0, 2).map(tag => `<span class="tag">${tag}</span>`).join('')}
-                        ${image.tags.length > 2 ? `<span class="tag">+${image.tags.length - 2}</span>` : ''}
-                    </div>
-                ` : ''}
-            </div>
-        `).join('');
-
-        grid.querySelectorAll('.image-card-2col').forEach(card => {
-            card.addEventListener('click', (e) => {
-                if (e.ctrlKey || e.metaKey) {
-                    const id = parseInt(card.dataset.id);
-                    if (this.selectedImageIds.has(id)) {
-                        this.selectedImageIds.delete(id);
-                        card.classList.remove('selected');
-                    } else {
-                        this.selectedImageIds.add(id);
-                        card.classList.add('selected');
-                    }
-                    this.updateSelectionUI();
-                } else {
-                    const imageId = parseInt(card.dataset.id);
-                    this.openEditModal(imageId);
-                }
-            });
-
-            if (this.selectedImageIds.has(parseInt(card.dataset.id))) {
-                card.classList.add('selected');
-            }
-        });
-
-        this.updateSelectionUI();
-    }
-
-    renderSearchResults() {
-        const grid = document.getElementById('searchResultGrid');
-        const emptyState = document.getElementById('emptySearchState');
-
-        if (this.filteredImages.length === 0) {
-            grid.innerHTML = '';
-            emptyState.style.display = 'flex';
-            return;
-        }
-
-        emptyState.style.display = 'none';
-
-        grid.innerHTML = this.filteredImages.map(image => `
-            <div class="image-card-2col" data-id="${image.id}">
-                <img src="${image.thumbnail}" alt="thumbnail">
-                ${image.tags.length > 0 ? `
-                    <div class="tag-overlay">
-                        ${image.tags.slice(0, 2).map(tag => `<span class="tag">${tag}</span>`).join('')}
-                        ${image.tags.length > 2 ? `<span class="tag">+${image.tags.length - 2}</span>` : ''}
-                    </div>
-                ` : ''}
-            </div>
-        `).join('');
-
-        grid.querySelectorAll('.image-card-2col').forEach(card => {
-            card.addEventListener('click', () => {
-                const imageId = parseInt(card.dataset.id);
-                this.openEditModal(imageId);
-            });
-        });
-    }
-
-    updateRecentTags() {
-        const container = document.getElementById('recentTags');
-        const tags = this.tagManager.recentTags.slice(0, 5);
-
-        container.innerHTML = tags.map(tag => `
-            <div class="tag-chip" data-tag="${tag}">${tag}</div>
-        `).join('');
-
-        document.querySelectorAll('#recentTags .tag-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                this.switchTab('filter');
-                const tag = chip.dataset.tag.toLowerCase();
-                if (!this.activeSearchTags.includes(tag)) {
-                    this.activeSearchTags.push(tag);
-                }
-                this.updateActiveFilters();
-                this.updateTagList();
-                this.applyFilters();
-            });
-        });
-    }
-
-    updateSelectionUI() {
-        const count = this.selectedImageIds.size;
-        const selectionBar = document.getElementById('selectionBar');
-        const selectionCount = document.getElementById('selectionCount');
-
-        if (count > 0) {
-            selectionBar.style.display = 'flex';
-            selectionCount.textContent = `${count}개 선택`;
         } else {
-            selectionBar.style.display = 'none';
+            autocomplete.style.display = 'none';
+        }
+    });
+
+    detailTagInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const tag = detailTagInput.value.trim();
+            if (tag && !image.tags.map(t => t.toLowerCase()).includes(tag.toLowerCase())) {
+                addTagToDetail(tag);
+                detailTagInput.value = '';
+            }
+        }
+    });
+
+    modal.classList.add('active');
+}
+
+function addTagToDetail(tag) {
+    const image = appState.allImages.find(img => img.id === parseInt(document.getElementById('detailImage').dataset.id));
+    if (!image) return;
+
+    const trimmedTag = tag.trim();
+    if (!trimmedTag || image.tags.map(t => t.toLowerCase()).includes(trimmedTag.toLowerCase())) {
+        return;
+    }
+
+    image.tags.push(trimmedTag);
+    recordTagUsage(trimmedTag);
+
+    const detailTagChips = document.getElementById('detailTagChips');
+    const newChip = document.createElement('div');
+    newChip.className = 'tag-chip-selected';
+    newChip.innerHTML = `
+        ${trimmedTag}
+        <button class="tag-chip-remove-btn" onclick="removeTag('${trimmedTag}')">✕</button>
+    `;
+    detailTagChips.appendChild(newChip);
+
+    document.getElementById('tagAutocomplete').style.display = 'none';
+}
+
+function selectAutocompleteTag(tag) {
+    addTagToDetail(tag);
+    document.getElementById('detailTagInput').value = '';
+}
+
+function removeTag(tag) {
+    const image = appState.allImages.find(img => img.id === parseInt(document.getElementById('detailImage').dataset.id));
+    if (!image) return;
+
+    image.tags = image.tags.filter(t => t !== tag);
+    
+    const detailTagChips = document.getElementById('detailTagChips');
+    const chips = detailTagChips.querySelectorAll('.tag-chip-selected');
+    chips.forEach(chip => {
+        if (chip.textContent.includes(tag)) {
+            chip.remove();
+        }
+    });
+}
+
+async function saveImageDetail() {
+    const imageId = parseInt(document.getElementById('detailImage').dataset.id);
+    const image = appState.allImages.find(img => img.id === imageId);
+    if (!image) return;
+
+    const memo = document.getElementById('detailMemo').value;
+    image.memo = memo;
+
+    await appState.db.updateImage(image);
+    closeDetailModal();
+    applyFilters();
+    renderArchiveTab();
+    showToast('저장되었습니다');
+}
+
+function closeDetailModal() {
+    document.getElementById('imageDetailModal').classList.remove('active');
+}
+
+// ====== Upload ======
+async function handleFiles(files) {
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+        showToast('이미지 파일을 선택해주세요');
+        return;
+    }
+
+    await uploadImages(imageFiles);
+}
+
+async function uploadImages(files) {
+    const quickSave = document.getElementById('quickSaveCheckbox')?.checked ?? true;
+    
+    document.getElementById('progressOverlay').style.display = 'flex';
+
+    for (let i = 0; i < files.length; i++) {
+        try {
+            const file = files[i];
+            const dataURL = await ImageProcessor.fileToDataURL(file);
+            const thumbnail = await ImageProcessor.generateThumbnail(dataURL);
+
+            const imageData = {
+                id: Date.now() + i,
+                thumbnail: thumbnail,
+                original: dataURL,
+                tags: [],
+                memo: '',
+                createdAt: new Date().toISOString()
+            };
+
+            await appState.db.saveImage(imageData);
+            appState.allImages.push(imageData);
+
+            const progress = Math.round(((i + 1) / files.length) * 100);
+            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressText').textContent = `${i + 1} / ${files.length}`;
+        } catch (error) {
+            console.error('Error processing image:', error);
         }
     }
 
-    showToast(message, type = 'info') {
-        const toast = document.getElementById('toast');
-        toast.textContent = message;
-        toast.className = `toast show ${type}`;
+    document.getElementById('progressOverlay').style.display = 'none';
+    document.getElementById('addImageModal').classList.remove('active');
+    document.getElementById('imageInput').value = '';
 
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 2500);
+    applyFilters();
+    renderArchiveTab();
+    showToast('저장되었습니다');
+
+    if (!quickSave && appState.allImages.length > 0) {
+        const lastImage = appState.allImages[appState.allImages.length - 1];
+        setTimeout(() => openDetailModal(lastImage.id), 300);
     }
+}
+
+// ====== Modal Helpers ======
+function showConfirmModal(text, onConfirm) {
+    document.getElementById('confirmText').textContent = text;
+    document.getElementById('confirmOkBtn').onclick = () => {
+        onConfirm();
+        document.getElementById('confirmModal').classList.remove('active');
+    };
+    document.getElementById('confirmModal').classList.add('active');
+}
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 2000);
+}
+
+function updateInfoDisplay() {
+    document.getElementById('imageCountInfo').textContent = appState.allImages.length + '개';
+    document.getElementById('tagCountInfo').textContent = appState.allTags.length + '개';
 }
 
 // ====== Initialize ======
-let db, tagManager, ui;
-
-async function initApp() {
-    db = new DatabaseManager();
-    
-    await new Promise(resolve => {
-        const checkDb = setInterval(() => {
-            if (db.db) {
-                clearInterval(checkDb);
-                resolve();
-            }
-        }, 100);
-    });
-
-    tagManager = new TagManager(db);
-    await new Promise(resolve => {
-        setTimeout(resolve, 500);
-    });
-
-    ui = new UIManager(db, tagManager);
-    await ui.loadImages();
-}
-
-document.addEventListener('DOMContentLoaded', initApp);
+document.addEventListener('DOMContentLoaded', initializeApp);
