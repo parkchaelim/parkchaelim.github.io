@@ -1,340 +1,43 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Outfit Archive</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>터치 테스트</title>
+    <style>
+        body { font-family: system-ui; padding: 20px; }
+        button { 
+            width: 100%;
+            padding: 20px;
+            font-size: 16px;
+            margin: 10px 0;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:active { opacity: 0.7; }
+    </style>
 </head>
 <body>
-    <div class="app">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-left">
-                <h1 class="header-title" id="headerTitle">검색</h1>
-            </div>
-            <div class="header-right">
-                <button class="btn-select-mode" id="selectModeBtn" style="display: none;">
-                    선택
-                </button>
-                <div class="select-mode-bar" id="selectModeBar" style="display: none;">
-                    <span id="selectionCount">0개 선택</span>
-                    <button class="btn-header-sm" id="selectAllBtn">전체</button>
-                    <button class="btn-header-sm" id="deselectAllBtn">해제</button>
-                    <button class="btn-header-done" id="selectDoneBtn">완료</button>
-                </div>
-                <button class="btn-edit-mode" id="editModeBtn" style="display: none;">
-                    편집
-                </button>
-                <button class="btn-edit-done" id="editDoneBtn" style="display: none;">
-                    완료
-                </button>
-            </div>
-        </header>
+    <h1>터치 반응 테스트</h1>
+    <button id="test1">버튼 1 - 클릭해보세요</button>
+    <button id="test2">버튼 2 - 터치해보세요</button>
+    <p id="status">대기 중...</p>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Search Tab -->
-            <div class="tab-content active" id="searchTab">
-                <div class="search-section">
-                    <div class="search-bar-wrapper">
-                        <input 
-                            type="text" 
-                            id="searchInput" 
-                            class="search-bar"
-                            placeholder="텍스트 검색(선택)"
-                            autocomplete="off"
-                        >
-                        <button class="search-clear-btn" id="searchClearBtn" style="display: none;">✕</button>
-                    </div>
-
-                    <!-- Selected Filter Tags -->
-                    <div id="selectedFilters" class="selected-filters"></div>
-
-                    <!-- Tag Badge Picker Trigger -->
-                    <button class="btn-tag-add" id="tagPickerBtn">
-                        <span>+ 태그 추가</span>
-                    </button>
-
-                    <!-- Filter Options (Collapsible) -->
-                    <button class="filter-toggle" id="filterToggle">
-                        <span id="filterLabel">필터 옵션</span>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                    </button>
-
-                    <div class="filter-options" id="filterOptions" style="display: none;">
-                        <div class="filter-option-item">
-                            <label>
-                                <input type="radio" name="filterMode" value="and" checked>
-                                모두 포함 (AND)
-                            </label>
-                        </div>
-                        <div class="filter-option-item">
-                            <label>
-                                <input type="radio" name="filterMode" value="or">
-                                하나라도 포함 (OR)
-                            </label>
-                        </div>
-                        <select id="sortBy">
-                            <option value="newest">최신순</option>
-                            <option value="oldest">오래된순</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Search Results -->
-                <div class="results-info" id="resultsInfo"></div>
-                <div class="grid-container" id="searchGrid"></div>
-                <div class="empty-state" id="searchEmptyState" style="display: none;">
-                    <p>검색 결과가 없어요</p>
-                </div>
-            </div>
-
-            <!-- Archive Tab -->
-            <div class="tab-content" id="archiveTab">
-                <div class="archive-header">
-                    <button class="btn-primary" id="addImageBtn">+ 이미지 추가</button>
-                </div>
-
-                <div class="grid-container" id="archiveGrid"></div>
-                <div class="empty-state" id="archiveEmptyState" style="display: none;">
-                    <p>이미지가 없어요</p>
-                    <button class="btn-primary" onclick="document.getElementById('addImageBtn').click()">+ 추가</button>
-                </div>
-            </div>
-
-            <!-- Tags Tab -->
-            <div class="tab-content" id="tagsTab">
-                <div class="tags-search-wrapper">
-                    <input 
-                        type="text" 
-                        id="tagsSearchInput" 
-                        class="tags-search-bar"
-                        placeholder="태그 검색"
-                        autocomplete="off"
-                    >
-                    <button class="tags-search-clear" id="tagsSearchClear" style="display: none;">✕</button>
-                </div>
-
-                <div class="tags-sort-control">
-                    <select id="tagsSortBy">
-                        <option value="frequency">자주 사용</option>
-                        <option value="alphabetic">가나다</option>
-                    </select>
-                </div>
-
-                <div class="tags-list" id="tagsList"></div>
-                
-                <div class="empty-state" id="tagsEmptyState" style="display: none;">
-                    <p>태그가 없어요</p>
-                </div>
-            </div>
-
-            <!-- Settings Tab -->
-            <div class="tab-content" id="settingsTab">
-                <div class="settings-section">
-                    <h3>이미지 표시</h3>
-                    <label class="checkbox-item">
-                        <input type="checkbox" id="imageDisplayToggle" checked>
-                        <span>전체 보기 (contain)</span>
-                    </label>
-                </div>
-
-                <div class="settings-section">
-                    <h3>데이터</h3>
-                    <button class="settings-btn" id="exportBtn">내보내기</button>
-                    <button class="settings-btn" id="importBtn">가져오기</button>
-                    <input type="file" id="importFile" accept=".json" style="display: none;">
-                </div>
-
-                <div class="settings-section">
-                    <h3>정보</h3>
-                    <div class="info-row">
-                        <span>저장된 이미지</span>
-                        <span id="imageCountInfo">0</span>
-                    </div>
-                    <div class="info-row">
-                        <span>태그</span>
-                        <span id="tagCountInfo">0</span>
-                    </div>
-                </div>
-
-                <div class="settings-section danger">
-                    <button class="settings-btn btn-danger" id="resetBtn">모두 초기화</button>
-                </div>
-            </div>
-        </main>
-
-        <!-- Multi-Select Action Bar (선택모드) -->
-        <div class="multi-action-bar" id="multiActionBar" style="display: none;">
-            <button class="action-btn" id="addTagsSelectedBtn">태그 추가</button>
-            <button class="action-btn" id="removeTagsSelectedBtn">태그 제거</button>
-            <button class="action-btn action-danger" id="deleteSelectedBtn">삭제</button>
-        </div>
-
-        <!-- Bottom Tab Bar -->
-        <nav class="bottom-tab-bar">
-            <button class="tab-btn active" data-tab="search" title="검색">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <path d="m21 21-4.35-4.35"></path>
-                </svg>
-                <span>검색</span>
-            </button>
-            <button class="tab-btn" data-tab="archive" title="보관함">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="3" y1="9" x2="21" y2="9"></line>
-                    <line x1="9" y1="3" x2="9" y2="21"></line>
-                </svg>
-                <span>보관함</span>
-            </button>
-            <button class="tab-btn" data-tab="tags" title="태그">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-                    <circle cx="8" cy="8" r="2"></circle>
-                </svg>
-                <span>태그</span>
-            </button>
-            <button class="tab-btn" data-tab="settings" title="설정">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m3.08 3.08l4.24 4.24M1 12h6m6 0h6m-16.78 7.78l4.24-4.24m3.08-3.08l4.24-4.24"></path>
-                </svg>
-                <span>설정</span>
-            </button>
-        </nav>
-    </div>
-
-    <!-- Modals & Overlays -->
-    
-    <!-- Add Image Modal -->
-    <div class="modal" id="addImageModal">
-        <div class="modal-overlay" onclick="closeModal('addImageModal')"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>이미지 추가</h2>
-                <button class="modal-close" onclick="closeModal('addImageModal')">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="upload-area" id="uploadArea">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    <p>드래그 또는 클릭</p>
-                    <p class="text-secondary">Ctrl+V 붙여넣기도 가능</p>
-                </div>
-                <input type="file" id="imageInput" accept="image/*" multiple style="display: none;">
-                <label class="checkbox-item">
-                    <input type="checkbox" id="quickAddCheckbox" checked>
-                    <span>태그 없이 저장</span>
-                </label>
-            </div>
-        </div>
-    </div>
-
-    <!-- Image Viewer (Full Screen) -->
-    <div class="image-viewer" id="imageViewer" style="display: none;">
-        <div class="viewer-header">
-            <button class="viewer-back" id="viewerBackBtn">‹</button>
-            <div class="viewer-counter" id="viewerCounter"></div>
-            <button class="viewer-delete" id="viewerDeleteBtn">🗑</button>
-        </div>
-        <div class="viewer-canvas" id="viewerCanvas" style="touch-action: none;">
-            <img id="viewerImage" src="" alt="image">
-        </div>
-        <div class="viewer-footer">
-            <button class="btn-sm" id="viewerEditBtn">편집</button>
-        </div>
-    </div>
-
-    <!-- Tag Picker (Bottom Sheet) -->
-    <div class="tag-picker-overlay" id="tagPickerOverlay" style="display: none;" onclick="closeTagPicker()"></div>
-    <div class="tag-picker" id="tagPicker" style="display: none;">
-        <div class="tag-picker-header">
-            <h3>태그 선택</h3>
-            <input type="text" id="tagPickerSearch" class="tag-picker-search" placeholder="검색...">
-        </div>
-        <div class="tag-picker-content" id="tagPickerContent"></div>
-    </div>
-
-    <!-- Edit Modal -->
-    <div class="modal" id="editModal">
-        <div class="modal-overlay" onclick="closeModal('editModal')"></div>
-        <div class="modal-content modal-fullscreen">
-            <div class="modal-header">
-                <button class="modal-back" onclick="closeModal('editModal')">‹</button>
-                <h2>편집</h2>
-                <button class="modal-delete" id="editDeleteBtn">🗑</button>
-            </div>
-            <div class="modal-body">
-                <div class="edit-image-preview">
-                    <img id="editPreviewImage" src="" alt="preview">
-                </div>
-
-                <div class="edit-section">
-                    <h3>태그</h3>
-                    <div id="editSelectedTags" class="selected-tags"></div>
-                    <button class="btn-tag-add" id="editTagPickerBtn">+ 태그 추가</button>
-                </div>
-
-                <div class="edit-section">
-                    <h3>메모</h3>
-                    <textarea id="editMemo" class="memo-input" placeholder="메모 추가..."></textarea>
-                </div>
-
-                <button class="btn-primary btn-block" id="editSaveBtn">저장</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Rename Tag Modal -->
-    <div class="modal" id="renameTagModal">
-        <div class="modal-overlay"></div>
-        <div class="modal-content modal-sm">
-            <div class="modal-body">
-                <h3 id="renameTagTitle">태그 이름 변경</h3>
-                <input type="text" id="renameTagInput" class="form-input" placeholder="새 태그명">
-                <div class="confirm-actions">
-                    <button class="btn-secondary" id="renameTagCancelBtn">취소</button>
-                    <button class="btn-primary" id="renameTagOkBtn">저장</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Confirm Modal -->
-    <div class="modal" id="confirmModal">
-        <div class="modal-overlay"></div>
-        <div class="modal-content modal-sm">
-            <div class="modal-body">
-                <p id="confirmText"></p>
-                <div id="confirmExtra" class="confirm-extra"></div>
-                <div class="confirm-actions">
-                    <button class="btn-secondary" id="confirmCancelBtn">취소</button>
-                    <button class="btn-danger" id="confirmOkBtn">삭제</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Progress Overlay -->
-    <div class="progress-overlay" id="progressOverlay" style="display: none;">
-        <div class="progress-container">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill"></div>
-            </div>
-            <p id="progressText">0 / 0</p>
-        </div>
-    </div>
-
-    <!-- Toast -->
-    <div class="toast" id="toast"></div>
-
-    <script src="app.js"></script>
+    <script>
+        console.log('스크립트 로드됨');
+        
+        document.getElementById('test1').addEventListener('click', () => {
+            console.log('test1 clicked');
+            document.getElementById('status').textContent = '✅ 버튼 1 작동!';
+        });
+        
+        document.getElementById('test2').addEventListener('touchstart', () => {
+            console.log('test2 touched');
+            document.getElementById('status').textContent = '✅ 버튼 2 터치 작동!';
+        });
+    </script>
 </body>
 </html>
